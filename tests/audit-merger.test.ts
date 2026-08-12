@@ -161,4 +161,62 @@ describe('mergeAuditData', () => {
     expect(result[0].dataElementName).toBe('Malaria Cases');
     expect(result[1].dataElementName).toBe('TB Cases');
   });
+
+  it('should sort rows by period in descending order', () => {
+    const dataValues: DataValue[] = [
+      {
+        dataElement: 'QHszJHrLFgx',
+        period: '2025',
+        orgUnit: 'QuGXmXjGx2o',
+        categoryOptionCombo: 'HllvX50cXC0',
+        attributeOptionCombo: 'HllvX50cXC0',
+        value: '100',
+      },
+      {
+        dataElement: 'QHszJHrLFgx',
+        period: '2026',
+        orgUnit: 'QuGXmXjGx2o',
+        categoryOptionCombo: 'HllvX50cXC0',
+        attributeOptionCombo: 'HllvX50cXC0',
+        value: '200',
+      },
+    ];
+
+    const audits: DataValueAudit[] = [
+      {
+        created: '2025-05-31T18:51:33.123',
+        modifiedBy: 'user1',
+        auditType: 'UPDATE',
+        value: '50',
+        period: '2025',
+        organisationUnit: 'QuGXmXjGx2o',
+        attributeOptionCombo: 'HllvX50cXC0',
+        categoryOptionCombo: 'HllvX50cXC0',
+        dataElement: 'QHszJHrLFgx',
+      },
+      {
+        created: '2026-05-31T18:51:33.123',
+        modifiedBy: 'user2',
+        auditType: 'UPDATE',
+        value: '150',
+        period: '2026',
+        organisationUnit: 'QuGXmXjGx2o',
+        attributeOptionCombo: 'HllvX50cXC0',
+        categoryOptionCombo: 'HllvX50cXC0',
+        dataElement: 'QHszJHrLFgx',
+      },
+    ];
+
+    const result = mergeAuditData(
+      dataValues,
+      audits,
+      dataElementNames,
+      cocNames,
+      mockOrgUnit
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0].period).toBe('2026');
+    expect(result[1].period).toBe('2025');
+  });
 });

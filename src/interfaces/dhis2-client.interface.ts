@@ -1,0 +1,29 @@
+import {
+  OrganisationUnit,
+  DataSetMeta,
+  DataValueAudit,
+  DataValueSetResponse,
+} from '../types/dhis2.js';
+
+export interface Dhis2ClientConfig {
+  baseUrl: string;
+  username?: string;
+  password?: string;
+  patToken?: string;
+}
+
+export interface IDhis2ApiClient {
+  getDistricts(parentOrgUnitId: string): Promise<OrganisationUnit[]>;
+  getDataSetMeta(dataSetId: string): Promise<DataSetMeta>;
+  getCategoryOptionCombos(): Promise<Record<string, string>>;
+  getDataValueAudits(
+    orgUnitId: string,
+    period: string,
+    dataSetId: string
+  ): Promise<DataValueAudit[]>;
+  getDataValueSets(
+    orgUnitId: string,
+    period: string,
+    dataSetId: string
+  ): Promise<DataValueSetResponse>;
+}

@@ -1,3 +1,4 @@
+import lodash from 'lodash';
 import {
   DataValue,
   DataValueAudit,
@@ -88,16 +89,10 @@ export function mergeAuditData(
     });
   }
 
-  // Sort rows alphabetically by dataElementName, then period, then disaggregationName
-  resultRows.sort((a, b) => {
-    const deComp = a.dataElementName.localeCompare(b.dataElementName);
-    if (deComp !== 0) return deComp;
-
-    const peComp = a.period.localeCompare(b.period);
-    if (peComp !== 0) return peComp;
-
-    return a.disaggregationName.localeCompare(b.disaggregationName);
-  });
-
-  return resultRows;
+  // Sort rows by period (descending), then dataElementName (ascending), then disaggregationName (ascending)
+  return lodash.orderBy(
+    resultRows,
+    ['period', 'dataElementName', 'disaggregationName'],
+    ['desc', 'asc', 'asc']
+  );
 }

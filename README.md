@@ -7,7 +7,7 @@ A TypeScript Node.js CLI tool built with `pnpm` that fetches dataset values and 
 - **District Grouping**: Grouped into Excel sheets based on level 4 districts under a specified parent organisation unit.
 - **Audit History Merging**: Combines current data values with audit history (`UPDATE` audit types) to reconstruct the modification trail.
 - **Filtered Output**: Includes only data elements and values that have audit update history.
-- **Sorted Data**: Rows within each sheet are sorted alphabetically by **Data Element Name**, **Period**, and **Disaggregation**.
+- **Sorted Data**: Rows within each sheet are sorted by **Period** (descending), **Data Element Name** (alphabetically), and **Disaggregation**.
 - **Dynamic Excel Layout**:
   - Auto-calculated dynamic horizontal columns for audit history: `Previous Value 1`, `Edited By (Prev 1)`, `Date (Prev 1)`, `Previous Value 2`, `Edited By (Prev 2)`, `Date (Prev 2)`, etc.
   - Formatted headers, frozen top pane, and auto-adjusted column widths.
@@ -58,35 +58,45 @@ DHIS2_PASSWORD=district
 
 ## Usage
 
+The CLI supports two subcommands:
+
+1. **`audit`** (default): Generates the Excel audit report.
+2. **`revert`**: Initiates the process to revert dataset values to previous states.
+
 ### Command Syntax
 
 ```bash
-pnpm start -- -ou <parentOrgUnitId> -ds <dataSetId> -pe <periods> [-o <outputFilename>]
+# Audit command (default)
+pnpm start audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [-o <outputFilename>]
+
+# Revert command
+pnpm start revert -p <parentOrgUnitId> -d <dataSetId> -e <periods>
 ```
 
 ### CLI Options
 
-| Option            | Shorthand | Required | Description                                                               |
-| :---------------- | :-------- | :------- | :------------------------------------------------------------------------ |
-| `--parentOrgUnit` | `-p`      | **Yes**  | Parent Organisation Unit ID (fetches level 4 districts under this parent) |
-| `--dataSet`       | `-d`      | **Yes**  | DHIS2 Dataset ID                                                          |
-| `--periods`       | `-e`      | **Yes**  | Comma-separated list of periods (e.g. `2026` or `202601,202602`)          |
-| `--output`        | `-o`      | No       | Output Excel file path (default: `dataset_audit_report.xlsx`)             |
-| `--baseUrl`       |           | No       | DHIS2 Base URL (overrides `DHIS2_BASE_URL` in `.env`)                     |
-| `--help`          | `-h`      | No       | Display CLI help menu                                                     |
+| Option            | Shorthand | Required (Audit) | Description                                                               |
+| :---------------- | :-------- | :--------------- | :------------------------------------------------------------------------ |
+| `--parentOrgUnit` | `-p`      | **Yes**          | Parent Organisation Unit ID (fetches level 4 districts under this parent) |
+| `--dataSet`       | `-d`      | **Yes**          | DHIS2 Dataset ID                                                          |
+| `--periods`       | `-e`      | **Yes**          | Comma-separated list of periods (e.g. `2026` or `202601,202602`)          |
+| `--output`        | `-o`      | No               | Output Excel file path (default: `dataset_audit_report.xlsx`)             |
+| `--baseUrl`       |           | No               | DHIS2 Base URL (overrides `DHIS2_BASE_URL` in `.env`)                     |
+| `--help`          | `-h`      | No               | Display CLI help menu                                                     |
 
 ### Example Commands
 
-#### Single Period
+#### Audit Command (Single or Multiple Periods)
 
 ```bash
-pnpm start -- -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026 -o audit_report_2026.xlsx
+pnpm start audit -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026 -o audit_report_2026.xlsx
+pnpm start -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602,202603 # audit is default
 ```
 
-#### Multiple Periods
+#### Revert Command
 
 ```bash
-pnpm start -- -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602,202603 -o audit_report_Q1.xlsx
+pnpm start revert -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026
 ```
 
 ---

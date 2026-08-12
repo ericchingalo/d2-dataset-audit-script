@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import type { IDhis2ApiClient, Dhis2ClientConfig } from '../interfaces/dhis2-client.interface.js';
 import {
   OrganisationUnit,
   DataSetMeta,
@@ -7,14 +8,9 @@ import {
   DataValueSetResponse,
 } from '../types/dhis2.js';
 
-export interface Dhis2ClientConfig {
-  baseUrl: string;
-  username?: string;
-  password?: string;
-  patToken?: string;
-}
+export type { Dhis2ClientConfig };
 
-export class Dhis2ApiClient {
+export class Dhis2ApiClient implements IDhis2ApiClient {
   private client: AxiosInstance;
 
   constructor(config: Dhis2ClientConfig) {

@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { IReportExporter } from '../interfaces/report-exporter.interface.js';
 import { MergedAuditRow } from '../types/dhis2.js';
 
 /**
@@ -25,6 +26,15 @@ export function sanitizeSheetName(rawName: string, existingNames: Set<string>): 
 
   existingNames.add(nameCandidate.toLowerCase());
   return nameCandidate;
+}
+
+export class ExcelExporter implements IReportExporter {
+  async exportReport(
+    districtDataMap: Map<string, MergedAuditRow[]>,
+    outputPath: string
+  ): Promise<void> {
+    await generateExcelReport(districtDataMap, outputPath);
+  }
 }
 
 export async function generateExcelReport(

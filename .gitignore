@@ -7,3 +7,5 @@ node_modules/
 # distribution files
 /dist
 
+# .xlsx report files
+*.xlsx
