@@ -10,6 +10,7 @@ import { Dhis2ApiClient } from './dhis2-api.js';
 import { ExcelExporter } from './excel-exporter.js';
 import { mergeAuditData } from './audit-merger.js';
 import { MergedAuditRow } from '../types/dhis2.js';
+import { resolveOutputPath } from '../utils/path-resolver.js';
 
 export type Dhis2ClientFactory = (config: Dhis2ClientConfig) => IDhis2ApiClient;
 
@@ -27,6 +28,8 @@ export class AuditService implements IAuditService {
   }
 
   async execute(options: AuditOptions): Promise<AuditResult> {
+    const finalOutputPath = resolveOutputPath(options.output);
+
     const client = this.clientFactory({
       baseUrl: options.baseUrl,
       username: options.username,
@@ -39,7 +42,7 @@ export class AuditService implements IAuditService {
     console.log(`Parent OrgUnit: ${options.parentOrgUnit}`);
     console.log(`DataSet ID:     ${options.dataSet}`);
     console.log(`Periods:        ${options.periods.join(", ")}`);
-    console.log(`Output File:    ${options.output}\n`);
+    console.log(`Output File:    ${finalOutputPath}\n`);
 
     // Step 1: Fetch Districts
     console.log("Fetching level 4 district organisation units...");
@@ -116,8 +119,8 @@ export class AuditService implements IAuditService {
       }
     }
 
-    console.log(`\nGenerating Excel report at: ${options.output}...`);
-    await this.exporter.exportReport(districtDataMap, options.output);
+    console.log(`\nGenerating Excel report at: ${finalOutputPath}...`);
+    await this.exporter.exportReport(districtDataMap, finalOutputPath);
 
     console.log(`\nSuccess! Excel report created successfully.`);
     console.log(`Total district sheets created: ${districtDataMap.size}`);
@@ -126,7 +129,7 @@ export class AuditService implements IAuditService {
     return {
       districtCount: districtDataMap.size,
       totalAuditRows,
-      outputPath: options.output,
+      outputPath: finalOutputPath,
     };
   }
 }

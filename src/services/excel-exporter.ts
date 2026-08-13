@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import ExcelJS from 'exceljs';
 import { IReportExporter } from '../interfaces/report-exporter.interface.js';
 import { MergedAuditRow } from '../types/dhis2.js';
@@ -149,6 +151,11 @@ export async function generateExcelReport(
         column.width = Math.min(maxLen + 4, 50);
       });
     }
+  }
+
+  const dir = path.dirname(outputPath);
+  if (dir && !fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 
   await workbook.xlsx.writeFile(outputPath);

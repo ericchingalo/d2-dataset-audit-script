@@ -1,3 +1,4 @@
+import path from 'path';
 import { describe, it, expect, vi } from 'vitest';
 import { AuditService } from '../src/services/audit.service.js';
 import { IDhis2ApiClient } from '../src/interfaces/dhis2-client.interface.js';
@@ -65,7 +66,7 @@ describe('AuditService', () => {
 
     expect(result.districtCount).toBe(1);
     expect(result.totalAuditRows).toBe(1);
-    expect(result.outputPath).toBe('test_report.xlsx');
+    expect(result.outputPath).toBe(path.join('output', 'test_report.xlsx'));
     expect(mockExporter.exportReport).toHaveBeenCalledOnce();
     expect(exportedMaps[0].has('District 1')).toBe(true);
   });
