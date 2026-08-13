@@ -30,7 +30,7 @@ export interface DataSetMeta {
 export interface DataValueAudit {
   created: string;
   modifiedBy: string;
-  auditType: 'UPDATE' | 'CREATE' | 'DELETE';
+  auditType: "UPDATE" | "CREATE" | "DELETE";
   value: string;
   period: string | { id: string };
   organisationUnit: string | { id: string };
@@ -75,10 +75,17 @@ export interface ImportCount {
 }
 
 export interface DataValueImportSummary {
-  status: 'SUCCESS' | 'WARNING' | 'ERROR';
-  description?: string;
-  importCount?: ImportCount;
-  conflicts?: Array<{ object?: string; value?: string }>;
+  httpStatusCode: string;
+  httpStatus: string;
+  status?: string;
+  response: {
+    status: "SUCCESS" | "WARNING" | "ERROR";
+    description?: string;
+    importCount?: ImportCount;
+    conflicts?: Array<{ object?: string; value?: string }>;
+    [key: string]: any;
+  };
+  [key: string]: any;
 }
 
 export interface MergedAuditRow {
@@ -95,4 +102,3 @@ export interface MergedAuditRow {
   history: HistoryEntry[];
   attributeOptionComboId?: string;
 }
-

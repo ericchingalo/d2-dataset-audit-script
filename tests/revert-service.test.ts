@@ -138,4 +138,56 @@ describe('RevertService', () => {
     expect(result.totalReverted).toBe(1);
     expect(mockPostDataValueSets).not.toHaveBeenCalled();
   });
+
+  it('pages data values in chunks of 100 when posting to DHIS2', async () => {
+    const mockPostDataValueSets = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      importCount: { imported: 0, updated: 75, ignored: 0, deleted: 0 },
+    });
+
+    const dataValues = Array.from({ length: 150 }, (_, i) => ({
+      dataElement: `de_${i}`,
+      period: '202601',
+      orgUnit: 'dist1',
+      categoryOptionCombo: 'default',
+      attributeOptionCombo: 'default',
+      value: '100',
+    }));
+
+    const audits = Array.from({ length: 150 }, (_, i) => ({
+      auditType: 'UPDATE' as const,
+      created: '2026-08-01T10:00:00.000',
+      modifiedBy: 'user1',
+      dataElement: `de_${i}`,
+      period: '202601',
+      organisationUnit: 'dist1',
+      categoryOptionCombo: 'default',
+      attributeOptionCombo: 'default',
+      value: '90',
+    }));
+
+    const mockClient: IDhis2ApiClient = {
+      getDistricts: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn().mockResolvedValue({ dataValues }),
+      getDataValueAudits: vi.fn().mockResolvedValue(audits),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.totalReverted).toBe(150);
+    expect(mockPostDataValueSets).toHaveBeenCalledTimes(2);
+    expect(mockPostDataValueSets.mock.calls[0][0].dataValues.length).toBe(100);
+    expect(mockPostDataValueSets.mock.calls[1][0].dataValues.length).toBe(50);
+    expect(result.importSummary?.importCount?.updated).toBe(150);
+  });
 });

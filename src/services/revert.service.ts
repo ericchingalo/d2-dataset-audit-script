@@ -1,3 +1,4 @@
+import lodash from "lodash";
 import {
   IRevertService,
   RevertOptions,
@@ -167,39 +168,90 @@ export class RevertService implements IRevertService {
       };
     }
 
-    console.log("Posting reverted values to DHIS2 (api/dataValueSets)...");
-    let importSummary: DataValueImportSummary;
-    try {
-      importSummary = await client.postDataValueSets({
-        dataSet: options.dataSet,
-        dataValues: valuesToRevert,
-      });
+    const BATCH_SIZE = 100;
+    const chunks = lodash.chunk(valuesToRevert, BATCH_SIZE);
+    console.log(
+      `\nPosting ${valuesToRevert.length} reverted value(s) in ${chunks.length} batch(es) of up to ${BATCH_SIZE} item(s)...`,
+    );
 
-      const report = generateImportReport({
-        totalReverted: valuesToRevert.length,
-        orgUnitsProcessed: districts.length,
-        importSummary,
-        dryRun: false,
-      });
-      console.log("\n" + report);
-    } catch (error) {
-      console.error(
-        `[Error] Failed to post reverted values to DHIS2: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+    const aggregatedSummary: any = {
+      status: "SUCCESS",
+      importCount: {
+        imported: 0,
+        updated: 0,
+        ignored: 0,
+        deleted: 0,
+      },
+      conflicts: [],
+    };
+
+    const descriptions: string[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(
+        `  [Batch ${i + 1}/${chunks.length}] Posting ${chunk.length} value(s) to DHIS2 (api/dataValueSets)...`,
       );
-      return {
-        totalReverted: valuesToRevert.length,
-        orgUnitsProcessed: districts.length,
-        status: "ERROR",
-      };
+      try {
+        const { response: chunkSummary } = await client.postDataValueSets({
+          dataSet: options.dataSet,
+          dataValues: chunk,
+        });
+
+        if (chunkSummary?.status === "ERROR") {
+          aggregatedSummary.status = "ERROR";
+        } else if (
+          chunkSummary?.status === "WARNING" &&
+          aggregatedSummary.status !== "ERROR"
+        ) {
+          aggregatedSummary.status = "WARNING";
+        }
+
+        if (chunkSummary?.importCount && aggregatedSummary.importCount) {
+          aggregatedSummary.importCount.imported +=
+            chunkSummary.importCount.imported || 0;
+          aggregatedSummary.importCount.updated +=
+            chunkSummary.importCount.updated || 0;
+          aggregatedSummary.importCount.ignored +=
+            chunkSummary.importCount.ignored || 0;
+          aggregatedSummary.importCount.deleted +=
+            chunkSummary.importCount.deleted || 0;
+        }
+
+        if (chunkSummary?.conflicts && chunkSummary.conflicts.length > 0) {
+          aggregatedSummary.conflicts!.push(...chunkSummary.conflicts);
+        }
+
+        if (chunkSummary?.description) {
+          descriptions.push(chunkSummary.description);
+        }
+      } catch (error) {
+        aggregatedSummary.status = "ERROR";
+        console.error(
+          `  [Error] Batch ${i + 1}/${chunks.length} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
+
+    if (descriptions.length > 0) {
+      aggregatedSummary.description = lodash.uniq(descriptions).join("; ");
+    }
+
+    const report = generateImportReport({
+      totalReverted: valuesToRevert.length,
+      orgUnitsProcessed: districts.length,
+      importSummary: aggregatedSummary,
+      dryRun: false,
+    });
+    console.log("\n" + report);
 
     return {
       totalReverted: valuesToRevert.length,
       orgUnitsProcessed: districts.length,
-      status: importSummary.status || "SUCCESS",
-      importSummary,
+      status: aggregatedSummary.status || "SUCCESS",
+      importSummary: aggregatedSummary,
     };
   }
 }
