@@ -1,8 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'fs';
 import { RevertService } from '../src/services/revert.service.js';
 import { IDhis2ApiClient } from '../src/interfaces/dhis2-client.interface.js';
+import * as excelReader from '../src/services/excel-reader.js';
 
 describe('RevertService', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('logs initiation of revert process and skips if missing required options', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -22,7 +28,35 @@ describe('RevertService', () => {
     consoleSpy.mockRestore();
   });
 
-  it('fetches audit history and posts reverted data values to DHIS2', async () => {
+  it('returns NO_FILES if no matching audit report file is found', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue([] as any);
+
+    const service = new RevertService();
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(result.status).toBe('NO_FILES');
+  });
+
+  it('reads audit report Excel and posts reverted data values to DHIS2', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '50',
+        previousValue: '40',
+      },
+    ]);
+
     const mockPostDataValueSets = vi.fn().mockResolvedValue({
       status: 'SUCCESS',
       importCount: { imported: 0, updated: 1, ignored: 0, deleted: 0 },
@@ -36,31 +70,8 @@ describe('RevertService', () => {
         dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
       }),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({ default: 'default' }),
-      getDataValueSets: vi.fn().mockResolvedValue({
-        dataValues: [
-          {
-            dataElement: 'de1',
-            period: '202601',
-            orgUnit: 'dist1',
-            categoryOptionCombo: 'default',
-            attributeOptionCombo: 'default',
-            value: '50',
-          },
-        ],
-      }),
-      getDataValueAudits: vi.fn().mockResolvedValue([
-        {
-          auditType: 'UPDATE',
-          created: '2026-08-01T10:00:00.000',
-          modifiedBy: 'john',
-          dataElement: 'de1',
-          period: '202601',
-          organisationUnit: 'dist1',
-          categoryOptionCombo: 'default',
-          attributeOptionCombo: 'default',
-          value: '40', // previous latest value to revert to
-        },
-      ]),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
       postDataValueSets: mockPostDataValueSets,
     };
 
@@ -90,37 +101,29 @@ describe('RevertService', () => {
   });
 
   it('prepares reverted values in dry-run mode without calling post API', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '100',
+        previousValue: '80',
+      },
+    ]);
+
     const mockPostDataValueSets = vi.fn();
 
     const mockClient: IDhis2ApiClient = {
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
-      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
-      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
-      getDataValueSets: vi.fn().mockResolvedValue({
-        dataValues: [
-          {
-            dataElement: 'de1',
-            period: '202601',
-            orgUnit: 'dist1',
-            categoryOptionCombo: 'default',
-            attributeOptionCombo: 'default',
-            value: '100',
-          },
-        ],
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
       }),
-      getDataValueAudits: vi.fn().mockResolvedValue([
-        {
-          auditType: 'UPDATE',
-          created: '2026-08-01T10:00:00.000',
-          modifiedBy: 'alice',
-          dataElement: 'de1',
-          period: '202601',
-          organisationUnit: 'dist1',
-          categoryOptionCombo: 'default',
-          attributeOptionCombo: 'default',
-          value: '80',
-        },
-      ]),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
       postDataValueSets: mockPostDataValueSets,
     };
 
@@ -140,38 +143,35 @@ describe('RevertService', () => {
   });
 
   it('pages data values in chunks of 100 when posting to DHIS2', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+
+    const parsedRows = Array.from({ length: 150 }, (_, i) => ({
+      orgUnitName: 'District 1',
+      dataElementName: `Data Element ${i}`,
+      disaggregationName: 'default',
+      period: '202601',
+      currentValue: '100',
+      previousValue: '90',
+    }));
+
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue(parsedRows);
+
     const mockPostDataValueSets = vi.fn().mockResolvedValue({
       status: 'SUCCESS',
       importCount: { imported: 0, updated: 75, ignored: 0, deleted: 0 },
     });
 
-    const dataValues = Array.from({ length: 150 }, (_, i) => ({
-      dataElement: `de_${i}`,
-      period: '202601',
-      orgUnit: 'dist1',
-      categoryOptionCombo: 'default',
-      attributeOptionCombo: 'default',
-      value: '100',
-    }));
-
-    const audits = Array.from({ length: 150 }, (_, i) => ({
-      auditType: 'UPDATE' as const,
-      created: '2026-08-01T10:00:00.000',
-      modifiedBy: 'user1',
-      dataElement: `de_${i}`,
-      period: '202601',
-      organisationUnit: 'dist1',
-      categoryOptionCombo: 'default',
-      attributeOptionCombo: 'default',
-      value: '90',
+    const dataSetElements = Array.from({ length: 150 }, (_, i) => ({
+      dataElement: { id: `de_${i}`, name: `Data Element ${i}` },
     }));
 
     const mockClient: IDhis2ApiClient = {
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
-      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements }),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
-      getDataValueSets: vi.fn().mockResolvedValue({ dataValues }),
-      getDataValueAudits: vi.fn().mockResolvedValue(audits),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
       postDataValueSets: mockPostDataValueSets,
     };
 

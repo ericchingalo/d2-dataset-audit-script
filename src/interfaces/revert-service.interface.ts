@@ -4,6 +4,7 @@ export interface RevertOptions {
   parentOrgUnit?: string;
   dataSet?: string;
   periods?: string[];
+  output?: string;
   baseUrl?: string;
   username?: string;
   password?: string;

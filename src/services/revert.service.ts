@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import lodash from "lodash";
 import {
   IRevertService,
@@ -9,9 +11,11 @@ import {
   Dhis2ClientConfig,
 } from "../interfaces/dhis2-client.interface.js";
 import { Dhis2ApiClient } from "./dhis2-api.js";
-import { mergeAuditData } from "./audit-merger.js";
-import { DataValue, DataValueImportSummary } from "../types/dhis2.js";
+import { DataValue } from "../types/dhis2.js";
 import { generateImportReport } from "../utils/import-report.js";
+import { readAuditReportExcel } from "./excel-reader.js";
+import { formatPrefixedOutputPath, resolveOutputPath } from "../utils/path-resolver.js";
+import { sanitizeSheetName } from "./excel-exporter.js";
 
 export type Dhis2ClientFactory = (config: Dhis2ClientConfig) => IDhis2ApiClient;
 
@@ -42,7 +46,7 @@ export class RevertService implements IRevertService {
       console.log(`Mode:           DRY RUN (No data will be posted to DHIS2)`);
     }
     console.log(
-      "\n[Revert] Process initiated. Reverting dataset changes to previous values...\n",
+      "\n[Revert] Process initiated. Reverting dataset changes using generated report files...\n",
     );
 
     if (
@@ -62,6 +66,63 @@ export class RevertService implements IRevertService {
       };
     }
 
+    const prefix = `${options.parentOrgUnit}_${options.periods.join("-")}_`;
+    const filesToRead: string[] = [];
+
+    if (options.output) {
+      const prefixedTarget = formatPrefixedOutputPath(
+        options.output,
+        options.parentOrgUnit,
+        options.periods,
+      );
+      if (fs.existsSync(prefixedTarget)) {
+        filesToRead.push(prefixedTarget);
+      } else {
+        const rawResolved = resolveOutputPath(options.output);
+        if (fs.existsSync(rawResolved)) {
+          filesToRead.push(rawResolved);
+        } else if (fs.existsSync(options.output)) {
+          filesToRead.push(options.output);
+        } else {
+          console.error(
+            `Error: Specified output file not found: ${prefixedTarget} or ${options.output}`,
+          );
+          return {
+            totalReverted: 0,
+            orgUnitsProcessed: 0,
+            status: "FILE_NOT_FOUND",
+          };
+        }
+      }
+    } else {
+      const outputDir = path.dirname(resolveOutputPath("dummy.xlsx"));
+      if (fs.existsSync(outputDir)) {
+        const allFiles = fs.readdirSync(outputDir);
+        for (const file of allFiles) {
+          if (file.startsWith(prefix) && file.endsWith(".xlsx")) {
+            filesToRead.push(path.join(outputDir, file));
+          }
+        }
+      }
+
+      if (filesToRead.length === 0) {
+        console.error(
+          `Error: No audit report files found matching prefix "${prefix}*.xlsx" in output/ directory. Run audit command first.`,
+        );
+        return {
+          totalReverted: 0,
+          orgUnitsProcessed: 0,
+          status: "NO_FILES",
+        };
+      }
+    }
+
+    console.log(
+      `Found ${filesToRead.length} matching audit report file(s) to revert from:`,
+    );
+    filesToRead.forEach((f) => console.log(` - ${f}`));
+    console.log("");
+
     const client = this.clientFactory({
       baseUrl: options.baseUrl,
       username: options.username,
@@ -69,101 +130,110 @@ export class RevertService implements IRevertService {
       patToken: options.patToken,
     });
 
-    console.log("Fetching level 4 district organisation units...");
-    const districts = await client.getOrgUnitsByLevel(options.parentOrgUnit, 4);
-    console.log(`Found ${districts.length} district(s).\n`);
+    console.log(
+      "Fetching organisation units and dataset metadata for ID mapping...",
+    );
+    const [districts, dataSetMeta, cocMap] = await Promise.all([
+      client.getOrgUnitsByLevel(options.parentOrgUnit, 4),
+      client.getDataSetMeta(options.dataSet),
+      client.getCategoryOptionCombos(),
+    ]);
 
-    if (districts.length === 0) {
-      console.warn("No districts found matching criteria.");
-      return {
-        totalReverted: 0,
-        orgUnitsProcessed: 0,
-        status: "NO_DISTRICTS",
-      };
-    }
-
-    console.log(`Fetching dataset metadata for ID: ${options.dataSet}...`);
-    const dataSetMeta = await client.getDataSetMeta(options.dataSet);
-    const dataElementMap: Record<string, string> = {};
+    const dataElementNameToIdMap: Record<string, string> = {};
     if (dataSetMeta.dataSetElements) {
       for (const dse of dataSetMeta.dataSetElements) {
         if (dse.dataElement) {
-          dataElementMap[dse.dataElement.id] = dse.dataElement.name;
+          dataElementNameToIdMap[
+            dse.dataElement.name.trim().toLowerCase()
+          ] = dse.dataElement.id;
         }
       }
     }
 
-    const cocMap = await client.getCategoryOptionCombos();
+    const cocNameToIdMap: Record<string, string> = {};
+    for (const [id, name] of Object.entries(cocMap)) {
+      cocNameToIdMap[name.trim().toLowerCase()] = id;
+    }
+
+    const orgUnitNameToIdMap: Record<string, string> = {};
+    const existingSheetNames = new Set<string>();
+    for (const ou of districts) {
+      orgUnitNameToIdMap[ou.name.trim().toLowerCase()] = ou.id;
+      const sanitized = sanitizeSheetName(ou.name, existingSheetNames);
+      orgUnitNameToIdMap[sanitized.trim().toLowerCase()] = ou.id;
+    }
 
     const valuesToRevert: DataValue[] = [];
+    const processedOrgUnitIds = new Set<string>();
 
-    for (const district of districts) {
-      console.log(
-        `Checking edits for district: ${district.name} (${district.id})...`,
-      );
-      for (const period of options.periods) {
-        const [dataValuesResp, audits] = await Promise.all([
-          client.getDataValueSets(district.id, period, options.dataSet),
-          client.getDataValueAudits(district.id, period, options.dataSet),
-        ]);
+    for (const filePath of filesToRead) {
+      console.log(`Reading report file: ${filePath}...`);
+      const parsedRows = await readAuditReportExcel(filePath);
 
-        const dataValues = dataValuesResp.dataValues || [];
-        const mergedRows = mergeAuditData(
-          dataValues,
-          audits,
-          dataElementMap,
-          cocMap,
-          district,
+      for (const row of parsedRows) {
+        const deId =
+          dataElementNameToIdMap[row.dataElementName.toLowerCase()];
+        const ouId =
+          orgUnitNameToIdMap[row.orgUnitName.toLowerCase()];
+        const cocId =
+          cocNameToIdMap[row.disaggregationName.toLowerCase()];
+
+        if (!deId) {
+          console.warn(
+            `[Warning] Unmapped Data Element name: "${row.dataElementName}"`,
+          );
+          continue;
+        }
+        if (!ouId) {
+          console.warn(
+            `[Warning] Unmapped Org Unit sheet name: "${row.orgUnitName}"`,
+          );
+          continue;
+        }
+
+        processedOrgUnitIds.add(ouId);
+
+        console.log(
+          `  [Revert candidate] DE: ${row.dataElementName} (${deId}) | Period: ${row.period} | Current: "${row.currentValue}" -> Revert to: "${row.previousValue}"`,
         );
 
-        for (const row of mergedRows) {
-          if (row.history && row.history.length > 0) {
-            const previousValue = row.history[0].value;
-            console.log(
-              `  [Revert candidate] DE: ${row.dataElementName} (${row.dataElementId}) | Period: ${row.period} | Current: "${row.currentValue}" -> Revert to: "${previousValue}"`,
-            );
-
-            const dv: DataValue = {
-              dataElement: row.dataElementId,
-              period: row.period,
-              orgUnit: row.orgUnitId,
-              categoryOptionCombo:
-                row.categoryOptionComboId !== "default"
-                  ? row.categoryOptionComboId
-                  : undefined,
-              attributeOptionCombo: row.attributeOptionComboId,
-              value: previousValue,
-              comment: `Reverted to previous value from ${row.currentValue} modified by (${row.modifiedBy})`,
-            };
-            valuesToRevert.push(dv);
-          }
-        }
+        valuesToRevert.push({
+          dataElement: deId,
+          period: row.period,
+          orgUnit: ouId,
+          categoryOptionCombo:
+            cocId && cocId !== "default" ? cocId : undefined,
+          value: row.previousValue,
+          comment: `Reverted to previous value from ${row.currentValue} via audit report (${path.basename(filePath)})`,
+        });
       }
     }
 
     if (valuesToRevert.length === 0) {
-      console.log("\n[Revert] No edited dataset values found to revert.");
+      console.log(
+        "\n[Revert] No edited dataset values with Previous Value 1 found in report file(s).",
+      );
       return {
         totalReverted: 0,
-        orgUnitsProcessed: districts.length,
+        orgUnitsProcessed: processedOrgUnitIds.size,
         status: "NO_CHANGES",
       };
     }
 
     console.log(
-      `\nFound ${valuesToRevert.length} value(s) to revert across ${districts.length} district(s).`,
+      `\nFound ${valuesToRevert.length} value(s) to revert across ${processedOrgUnitIds.size} org unit(s).`,
     );
 
     if (options.dryRun) {
       const report = generateImportReport({
         totalReverted: valuesToRevert.length,
-        orgUnitsProcessed: districts.length,
+        orgUnitsProcessed: processedOrgUnitIds.size,
         dryRun: true,
       });
       console.log("\n" + report);
       return {
         totalReverted: valuesToRevert.length,
-        orgUnitsProcessed: districts.length,
+        orgUnitsProcessed: processedOrgUnitIds.size,
         status: "DRY_RUN",
       };
     }
@@ -242,7 +312,7 @@ export class RevertService implements IRevertService {
 
     const report = generateImportReport({
       totalReverted: valuesToRevert.length,
-      orgUnitsProcessed: districts.length,
+      orgUnitsProcessed: processedOrgUnitIds.size,
       importSummary: aggregatedSummary,
       dryRun: false,
     });
@@ -250,7 +320,7 @@ export class RevertService implements IRevertService {
 
     return {
       totalReverted: valuesToRevert.length,
-      orgUnitsProcessed: districts.length,
+      orgUnitsProcessed: processedOrgUnitIds.size,
       status: aggregatedSummary.status || "SUCCESS",
       importSummary: aggregatedSummary,
     };

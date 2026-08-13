@@ -24,6 +24,10 @@ export class RevertCommand implements ICLICommand {
         "Comma-separated list of periods (e.g. 2026 or 202601,202602)",
       )
       .option(
+        "-o, --output <filename>",
+        "Specific output Excel filename to revert from",
+      )
+      .option(
         "--baseUrl <url>",
         "DHIS2 Base URL (overrides DHIS2_BASE_URL env variable)",
       )
@@ -62,6 +66,7 @@ export class RevertCommand implements ICLICommand {
           parentOrgUnit: options.parentOrgUnit,
           dataSet: options.dataSet,
           periods: periodsList,
+          output: options.output,
           baseUrl,
           username,
           password,
