@@ -74,6 +74,11 @@ export function mergeAuditData(
       created: audit.created,
     }));
 
+    const aocId =
+      currentValueObj?.attributeOptionCombo ||
+      extractId(sortedAudits[0]?.attributeOptionCombo) ||
+      undefined;
+
     resultRows.push({
       dataElementId: deId,
       dataElementName: deName,
@@ -86,6 +91,7 @@ export function mergeAuditData(
       modifiedBy,
       lastUpdated,
       history,
+      attributeOptionComboId: aocId,
     });
   }
 

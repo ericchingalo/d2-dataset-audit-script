@@ -3,6 +3,8 @@ import {
   DataSetMeta,
   DataValueAudit,
   DataValueSetResponse,
+  DataValue,
+  DataValueImportSummary,
 } from '../types/dhis2.js';
 
 export interface Dhis2ClientConfig {
@@ -26,4 +28,6 @@ export interface IDhis2ApiClient {
     period: string,
     dataSetId: string
   ): Promise<DataValueSetResponse>;
+  postDataValueSets(dataValueSet: DataValueSetResponse): Promise<DataValueImportSummary>;
+  postDataValue?(dataValue: DataValue): Promise<any>;
 }

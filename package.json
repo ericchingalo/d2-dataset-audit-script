@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "tsx src/index.ts",
+    "start-audit": "tsx src/index.ts audit",
+    "start-revert": "tsx src/index.ts revert",
     "test": "vitest run"
   },
   "keywords": [],

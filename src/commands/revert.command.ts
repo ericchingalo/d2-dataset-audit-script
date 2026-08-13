@@ -1,7 +1,7 @@
-import { Command } from 'commander';
-import { ICLICommand } from './command.interface.js';
-import { IRevertService } from '../interfaces/revert-service.interface.js';
-import { RevertService } from '../services/revert.service.js';
+import { Command } from "commander";
+import { ICLICommand } from "./command.interface.js";
+import { IRevertService } from "../interfaces/revert-service.interface.js";
+import { RevertService } from "../services/revert.service.js";
 
 export class RevertCommand implements ICLICommand {
   private revertService: IRevertService;
@@ -12,21 +12,22 @@ export class RevertCommand implements ICLICommand {
 
   register(program: Command): void {
     program
-      .command('revert')
-      .description('Initiate process to revert dataset values to prior state')
+      .command("revert")
+      .description("Initiate process to revert dataset values to prior state")
       .option(
-        '-p, --parentOrgUnit <id>',
-        'Parent Organisation Unit ID (fetches level 4 districts under this parent)'
+        "-p, --parentOrgUnit <id>",
+        "Parent Organisation Unit ID (fetches level 4 districts under this parent)",
       )
-      .option('-d, --dataSet <id>', 'DHIS2 Dataset ID')
+      .option("-d, --dataSet <id>", "DHIS2 Dataset ID")
       .option(
-        '-e, --periods <periods>',
-        'Comma-separated list of periods (e.g. 2026 or 202601,202602)'
+        "-e, --periods <periods>",
+        "Comma-separated list of periods (e.g. 2026 or 202601,202602)",
       )
       .option(
-        '--baseUrl <url>',
-        'DHIS2 Base URL (overrides DHIS2_BASE_URL env variable)'
+        "--baseUrl <url>",
+        "DHIS2 Base URL (overrides DHIS2_BASE_URL env variable)",
       )
+      .option("--dry-run", "Preview values to revert without posting to DHIS2")
       .action(async (options) => {
         const baseUrl = options.baseUrl || process.env.DHIS2_BASE_URL;
         const username = process.env.DHIS2_USERNAME;
@@ -35,7 +36,7 @@ export class RevertCommand implements ICLICommand {
 
         const periodsList = options.periods
           ? options.periods
-              .split(',')
+              .split(",")
               .map((p: string) => p.trim())
               .filter(Boolean)
           : undefined;
@@ -48,6 +49,7 @@ export class RevertCommand implements ICLICommand {
           username,
           password,
           patToken,
+          dryRun: options.dryRun,
         });
       });
   }

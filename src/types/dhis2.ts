@@ -43,8 +43,8 @@ export interface DataValue {
   dataElement: string;
   period: string;
   orgUnit: string;
-  categoryOptionCombo: string;
-  attributeOptionCombo: string;
+  categoryOptionCombo?: string;
+  attributeOptionCombo?: string;
   value: string;
   storedBy?: string;
   created?: string;
@@ -67,6 +67,20 @@ export interface HistoryEntry {
   created: string;
 }
 
+export interface ImportCount {
+  imported: number;
+  updated: number;
+  ignored: number;
+  deleted: number;
+}
+
+export interface DataValueImportSummary {
+  status: 'SUCCESS' | 'WARNING' | 'ERROR';
+  description?: string;
+  importCount?: ImportCount;
+  conflicts?: Array<{ object?: string; value?: string }>;
+}
+
 export interface MergedAuditRow {
   dataElementId: string;
   dataElementName: string;
@@ -79,4 +93,6 @@ export interface MergedAuditRow {
   modifiedBy: string;
   lastUpdated: string;
   history: HistoryEntry[];
+  attributeOptionComboId?: string;
 }
+

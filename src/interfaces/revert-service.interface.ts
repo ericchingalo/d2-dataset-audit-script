@@ -1,3 +1,5 @@
+import { DataValueImportSummary } from '../types/dhis2.js';
+
 export interface RevertOptions {
   parentOrgUnit?: string;
   dataSet?: string;
@@ -6,8 +8,16 @@ export interface RevertOptions {
   username?: string;
   password?: string;
   patToken?: string;
+  dryRun?: boolean;
+}
+
+export interface RevertResult {
+  totalReverted: number;
+  orgUnitsProcessed: number;
+  status: string;
+  importSummary?: DataValueImportSummary;
 }
 
 export interface IRevertService {
-  execute(options: RevertOptions): Promise<void>;
+  execute(options: RevertOptions): Promise<RevertResult>;
 }

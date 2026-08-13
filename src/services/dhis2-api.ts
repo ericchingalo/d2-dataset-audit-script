@@ -1,12 +1,17 @@
-import axios, { AxiosInstance } from 'axios';
-import type { IDhis2ApiClient, Dhis2ClientConfig } from '../interfaces/dhis2-client.interface.js';
+import axios, { AxiosInstance } from "axios";
+import type {
+  IDhis2ApiClient,
+  Dhis2ClientConfig,
+} from "../interfaces/dhis2-client.interface.js";
 import {
   OrganisationUnit,
   DataSetMeta,
   CategoryOptionCombo,
   DataValueAudit,
   DataValueSetResponse,
-} from '../types/dhis2.js';
+  DataValue,
+  DataValueImportSummary,
+} from "../types/dhis2.js";
 
 export type { Dhis2ClientConfig };
 
@@ -15,12 +20,12 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
 
   constructor(config: Dhis2ClientConfig) {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
     };
 
     if (config.patToken) {
-      headers['Authorization'] = `ApiToken ${config.patToken}`;
+      headers["Authorization"] = `ApiToken ${config.patToken}`;
     }
 
     const auth =
@@ -32,7 +37,7 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
         : undefined;
 
     this.client = axios.create({
-      baseURL: config.baseUrl.replace(/\/+$/, ''),
+      baseURL: config.baseUrl.replace(/\/+$/, ""),
       headers,
       auth,
     });
@@ -42,17 +47,16 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
    * Fetch district organisation units (level 4) under a given parent org unit
    */
   async getDistricts(parentOrgUnitId: string): Promise<OrganisationUnit[]> {
-    const response = await this.client.get<{ organisationUnits: OrganisationUnit[] }>(
-      `api/organisationUnits`,
-      {
-        params: {
-          fields: 'id,name',
-          filter: `path:like:${parentOrgUnitId}`,
-          level: 4,
-          paging: false,
-        },
-      }
-    );
+    const response = await this.client.get<{
+      organisationUnits: OrganisationUnit[];
+    }>(`api/organisationUnits`, {
+      params: {
+        fields: "id,name",
+        filter: `path:like:${parentOrgUnitId}`,
+        level: 4,
+        paging: false,
+      },
+    });
     return response.data?.organisationUnits || [];
   }
 
@@ -60,11 +64,14 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
    * Fetch dataset metadata including data elements
    */
   async getDataSetMeta(dataSetId: string): Promise<DataSetMeta> {
-    const response = await this.client.get<DataSetMeta>(`api/dataSets/${dataSetId}`, {
-      params: {
-        fields: 'name,dataSetElements[dataElement[id,name]]',
+    const response = await this.client.get<DataSetMeta>(
+      `api/dataSets/${dataSetId}`,
+      {
+        params: {
+          fields: "name,dataSetElements[dataElement[id,name]]",
+        },
       },
-    });
+    );
     return response.data;
   }
 
@@ -73,15 +80,14 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
    */
   async getCategoryOptionCombos(): Promise<Record<string, string>> {
     try {
-      const response = await this.client.get<{ categoryOptionCombos: CategoryOptionCombo[] }>(
-        `api/categoryOptionCombos`,
-        {
-          params: {
-            fields: 'id,name',
-            paging: false,
-          },
-        }
-      );
+      const response = await this.client.get<{
+        categoryOptionCombos: CategoryOptionCombo[];
+      }>(`api/categoryOptionCombos`, {
+        params: {
+          fields: "id,name",
+          paging: false,
+        },
+      });
       const map: Record<string, string> = {};
       for (const coc of response.data?.categoryOptionCombos || []) {
         map[coc.id] = coc.name;
@@ -98,26 +104,25 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
   async getDataValueAudits(
     orgUnitId: string,
     period: string,
-    dataSetId: string
+    dataSetId: string,
   ): Promise<DataValueAudit[]> {
     try {
-      const response = await this.client.get<{ dataValueAudits: DataValueAudit[] }>(
-        `api/audits/dataValue`,
-        {
-          params: {
-            ou: orgUnitId,
-            pe: period,
-            ds: dataSetId,
-            skipPaging: true,
-          },
-        }
-      );
+      const response = await this.client.get<{
+        dataValueAudits: DataValueAudit[];
+      }>(`api/audits/dataValue`, {
+        params: {
+          ou: orgUnitId,
+          pe: period,
+          ds: dataSetId,
+          skipPaging: true,
+        },
+      });
       return response.data?.dataValueAudits || [];
     } catch (error) {
       console.warn(
         `[Warning] Failed to fetch audits for orgUnit ${orgUnitId}, period ${period}: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return [];
     }
@@ -129,24 +134,60 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
   async getDataValueSets(
     orgUnitId: string,
     period: string,
-    dataSetId: string
+    dataSetId: string,
   ): Promise<DataValueSetResponse> {
     try {
-      const response = await this.client.get<DataValueSetResponse>(`api/dataValueSets`, {
-        params: {
-          orgUnit: orgUnitId,
-          period: period,
-          dataSet: dataSetId,
+      const response = await this.client.get<DataValueSetResponse>(
+        `api/dataValueSets`,
+        {
+          params: {
+            orgUnit: orgUnitId,
+            period: period,
+            dataSet: dataSetId,
+          },
         },
-      });
+      );
       return response.data;
     } catch (error) {
       console.warn(
         `[Warning] Failed to fetch data values for orgUnit ${orgUnitId}, period ${period}: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return { dataValues: [] };
     }
+  }
+
+  /**
+   * Post dataset values to DHIS2 api/dataValueSets
+   */
+  async postDataValueSets(
+    dataValueSet: DataValueSetResponse,
+  ): Promise<DataValueImportSummary> {
+    const response = await this.client.post<DataValueImportSummary>(
+      `api/dataValueSets`,
+      {
+        dataValues: dataValueSet.dataValues,
+      },
+    );
+    return response.data;
+  }
+
+  /**
+   * Post single data value to DHIS2 api/dataValues
+   */
+  async postDataValue(dataValue: DataValue): Promise<any> {
+    const response = await this.client.post(`api/dataValues`, null, {
+      params: {
+        de: dataValue.dataElement,
+        pe: dataValue.period,
+        ou: dataValue.orgUnit,
+        co: dataValue.categoryOptionCombo,
+        ao: dataValue.attributeOptionCombo,
+        value: dataValue.value,
+        comment: dataValue.comment,
+      },
+    });
+    return response.data;
   }
 }
