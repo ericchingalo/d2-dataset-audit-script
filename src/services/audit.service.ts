@@ -10,7 +10,7 @@ import { Dhis2ApiClient } from './dhis2-api.js';
 import { ExcelExporter } from './excel-exporter.js';
 import { mergeAuditData } from './audit-merger.js';
 import { MergedAuditRow } from '../types/dhis2.js';
-import { resolveOutputPath } from '../utils/path-resolver.js';
+import { formatPrefixedOutputPath } from '../utils/path-resolver.js';
 
 export type Dhis2ClientFactory = (config: Dhis2ClientConfig) => IDhis2ApiClient;
 
@@ -28,7 +28,12 @@ export class AuditService implements IAuditService {
   }
 
   async execute(options: AuditOptions): Promise<AuditResult> {
-    const finalOutputPath = resolveOutputPath(options.output);
+    const level = options.level ?? 4;
+    const finalOutputPath = formatPrefixedOutputPath(
+      options.output,
+      options.parentOrgUnit,
+      options.periods
+    );
 
     const client = this.clientFactory({
       baseUrl: options.baseUrl,
@@ -40,17 +45,28 @@ export class AuditService implements IAuditService {
     console.log("--- DHIS2 Dataset Audit Generator ---");
     console.log(`Base URL:       ${options.baseUrl}`);
     console.log(`Parent OrgUnit: ${options.parentOrgUnit}`);
+    console.log(`OrgUnit Level:  ${level}`);
     console.log(`DataSet ID:     ${options.dataSet}`);
     console.log(`Periods:        ${options.periods.join(", ")}`);
     console.log(`Output File:    ${finalOutputPath}\n`);
 
-    // Step 1: Fetch Districts
-    console.log("Fetching level 4 district organisation units...");
-    const districts = await client.getDistricts(options.parentOrgUnit);
-    console.log(`Found ${districts.length} district(s).\n`);
+    // Step 0: Validate OrgUnit Level
+    console.log(`Validating organisation unit level ${level} in DHIS2...`);
+    const isValidLevel = await client.validateOrgUnitLevel(level);
+    if (!isValidLevel) {
+      const errorMsg = `Error: Organisation unit level ${level} does not exist in DHIS2. Terminating process.`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    console.log(`Level ${level} verified.\n`);
 
-    if (districts.length === 0) {
-      console.warn("No districts found matching the criteria.");
+    // Step 1: Fetch OrgUnits at requested level
+    console.log(`Fetching level ${level} organisation units...`);
+    const orgUnits = await client.getOrgUnitsByLevel(options.parentOrgUnit, level);
+    console.log(`Found ${orgUnits.length} organisation unit(s).\n`);
+
+    if (orgUnits.length === 0) {
+      console.warn("No organisation units found matching the criteria.");
     }
 
     // Step 2: Fetch DataSet Metadata
@@ -75,18 +91,18 @@ export class AuditService implements IAuditService {
       `Loaded ${Object.keys(cocMap).length} category option combo(s).\n`
     );
 
-    // Step 4: Fetch audit data per district and period
-    const districtDataMap = new Map<string, MergedAuditRow[]>();
+    // Step 4: Fetch audit data per org unit and period
+    const orgUnitDataMap = new Map<string, MergedAuditRow[]>();
     let totalAuditRows = 0;
 
-    for (const district of districts) {
-      console.log(`Processing district: ${district.name} (${district.id})...`);
-      let allDistrictRows: MergedAuditRow[] = [];
+    for (const orgUnit of orgUnits) {
+      console.log(`Processing org unit: ${orgUnit.name} (${orgUnit.id})...`);
+      let allOrgUnitRows: MergedAuditRow[] = [];
 
       for (const period of options.periods) {
         const [dataValuesResp, audits] = await Promise.all([
-          client.getDataValueSets(district.id, period, options.dataSet),
-          client.getDataValueAudits(district.id, period, options.dataSet),
+          client.getDataValueSets(orgUnit.id, period, options.dataSet),
+          client.getDataValueAudits(orgUnit.id, period, options.dataSet),
         ]);
 
         const dataValues = dataValuesResp.dataValues || [];
@@ -95,39 +111,39 @@ export class AuditService implements IAuditService {
           audits,
           dataElementMap,
           cocMap,
-          district
+          orgUnit
         );
 
-        allDistrictRows.push(...mergedRows);
+        allOrgUnitRows.push(...mergedRows);
       }
 
-      if (allDistrictRows.length > 0) {
-        // Sort district rows by period (descending), then data element name, then disaggregation
-        allDistrictRows = lodash.orderBy(
-          allDistrictRows,
+      if (allOrgUnitRows.length > 0) {
+        // Sort rows by period (descending), then data element name, then disaggregation
+        allOrgUnitRows = lodash.orderBy(
+          allOrgUnitRows,
           ["period", "dataElementName", "disaggregationName"],
           ["desc", "asc", "asc"]
         );
 
-        districtDataMap.set(district.name, allDistrictRows);
-        totalAuditRows += allDistrictRows.length;
+        orgUnitDataMap.set(orgUnit.name, allOrgUnitRows);
+        totalAuditRows += allOrgUnitRows.length;
         console.log(
-          `  -> ${allDistrictRows.length} modified audit record(s) merged for ${district.name}`
+          `  -> ${allOrgUnitRows.length} modified audit record(s) merged for ${orgUnit.name}`
         );
       } else {
-        console.log(`  -> No modified data values found for ${district.name}`);
+        console.log(`  -> No modified data values found for ${orgUnit.name}`);
       }
     }
 
     console.log(`\nGenerating Excel report at: ${finalOutputPath}...`);
-    await this.exporter.exportReport(districtDataMap, finalOutputPath);
+    await this.exporter.exportReport(orgUnitDataMap, finalOutputPath);
 
     console.log(`\nSuccess! Excel report created successfully.`);
-    console.log(`Total district sheets created: ${districtDataMap.size}`);
+    console.log(`Total org unit sheets created: ${orgUnitDataMap.size}`);
     console.log(`Total audited rows exported:   ${totalAuditRows}`);
 
     return {
-      districtCount: districtDataMap.size,
+      districtCount: orgUnitDataMap.size,
       totalAuditRows,
       outputPath: finalOutputPath,
     };

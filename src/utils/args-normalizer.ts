@@ -19,6 +19,10 @@ export function normalizeArgs(args: string[]): string[] {
       return arg.replace(/^--?pe=/, '--periods=');
     }
     if (arg === '-pe' || arg === '--pe') return '--periods';
+    if (arg.startsWith('-lvl=') || arg.startsWith('--lvl=') || arg.startsWith('-level=')) {
+      return arg.replace(/^--?(lvl|level)=/, '--level=');
+    }
+    if (arg === '-lvl' || arg === '--lvl' || arg === '-level') return '--level';
     return arg;
   });
 }

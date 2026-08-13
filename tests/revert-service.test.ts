@@ -29,7 +29,7 @@ describe('RevertService', () => {
     });
 
     const mockClient: IDhis2ApiClient = {
-      getDistricts: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({
         id: 'ds1',
         name: 'Dataset 1',
@@ -93,7 +93,7 @@ describe('RevertService', () => {
     const mockPostDataValueSets = vi.fn();
 
     const mockClient: IDhis2ApiClient = {
-      getDistricts: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
       getDataValueSets: vi.fn().mockResolvedValue({
@@ -167,7 +167,7 @@ describe('RevertService', () => {
     }));
 
     const mockClient: IDhis2ApiClient = {
-      getDistricts: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
       getDataValueSets: vi.fn().mockResolvedValue({ dataValues }),

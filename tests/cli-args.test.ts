@@ -54,6 +54,7 @@ describe("CLI Argument Normalization", () => {
       "WqMbv5DkReA",
       "-pe",
       "2026,2025",
+      "-lvl=4",
     ];
     const expected = [
       "node",
@@ -63,6 +64,7 @@ describe("CLI Argument Normalization", () => {
       "WqMbv5DkReA",
       "--periods",
       "2026,2025",
+      "--level=4",
     ];
     expect(normalizeArgs(input)).toEqual(expected);
   });

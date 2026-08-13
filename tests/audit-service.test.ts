@@ -17,7 +17,8 @@ describe('AuditService', () => {
     };
 
     const mockClient: IDhis2ApiClient = {
-      getDistricts: vi.fn().mockResolvedValue([mockOrgUnit]),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([mockOrgUnit]),
       getDataSetMeta: vi.fn().mockResolvedValue(mockDataSetMeta),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({ coc1: '< 5 Years' }),
       getDataValueAudits: vi.fn().mockResolvedValue([
@@ -60,14 +61,41 @@ describe('AuditService', () => {
       parentOrgUnit: 'parent1',
       dataSet: 'ds1',
       periods: ['2026'],
+      level: 4,
       output: 'test_report.xlsx',
       baseUrl: 'https://dhis2.example.org',
     });
 
     expect(result.districtCount).toBe(1);
     expect(result.totalAuditRows).toBe(1);
-    expect(result.outputPath).toBe(path.join('output', 'test_report.xlsx'));
+    expect(result.outputPath).toBe(path.join('output', 'parent1_2026_test_report.xlsx'));
+    expect(mockClient.validateOrgUnitLevel).toHaveBeenCalledWith(4);
+    expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('parent1', 4);
     expect(mockExporter.exportReport).toHaveBeenCalledOnce();
     expect(exportedMaps[0].has('District 1')).toBe(true);
+  });
+
+  it('throws error when organisation unit level is invalid in DHIS2', async () => {
+    const mockClient: IDhis2ApiClient = {
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(false),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn(),
+      getCategoryOptionCombos: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      getDataValueSets: vi.fn(),
+    };
+
+    const auditService = new AuditService(() => mockClient);
+
+    await expect(
+      auditService.execute({
+        parentOrgUnit: 'parent1',
+        dataSet: 'ds1',
+        periods: ['2026'],
+        level: 99,
+        output: 'test_report.xlsx',
+        baseUrl: 'https://dhis2.example.org',
+      })
+    ).rejects.toThrow('Organisation unit level 99 does not exist in DHIS2');
   });
 });

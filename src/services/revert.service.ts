@@ -70,7 +70,7 @@ export class RevertService implements IRevertService {
     });
 
     console.log("Fetching level 4 district organisation units...");
-    const districts = await client.getDistricts(options.parentOrgUnit);
+    const districts = await client.getOrgUnitsByLevel(options.parentOrgUnit, 4);
     console.log(`Found ${districts.length} district(s).\n`);
 
     if (districts.length === 0) {
@@ -193,10 +193,11 @@ export class RevertService implements IRevertService {
         `  [Batch ${i + 1}/${chunks.length}] Posting ${chunk.length} value(s) to DHIS2 (api/dataValueSets)...`,
       );
       try {
-        const { response: chunkSummary } = await client.postDataValueSets({
+        const rawSummary = await client.postDataValueSets({
           dataSet: options.dataSet,
           dataValues: chunk,
         });
+        const chunkSummary = rawSummary?.response || rawSummary;
 
         if (chunkSummary?.status === "ERROR") {
           aggregatedSummary.status = "ERROR";

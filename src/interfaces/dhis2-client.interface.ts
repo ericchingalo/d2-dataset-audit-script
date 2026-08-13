@@ -15,7 +15,8 @@ export interface Dhis2ClientConfig {
 }
 
 export interface IDhis2ApiClient {
-  getDistricts(parentOrgUnitId: string): Promise<OrganisationUnit[]>;
+  getOrgUnitsByLevel(parentOrgUnitId: string, level: number): Promise<OrganisationUnit[]>;
+  validateOrgUnitLevel(level: number): Promise<boolean>;
   getDataSetMeta(dataSetId: string): Promise<DataSetMeta>;
   getCategoryOptionCombos(): Promise<Record<string, string>>;
   getDataValueAudits(

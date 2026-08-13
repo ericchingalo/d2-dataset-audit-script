@@ -44,16 +44,44 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
   }
 
   /**
-   * Fetch district organisation units (level 4) under a given parent org unit
+   * Validate if an organisation unit level exists in DHIS2
    */
-  async getDistricts(parentOrgUnitId: string): Promise<OrganisationUnit[]> {
+  async validateOrgUnitLevel(level: number): Promise<boolean> {
+    try {
+      const response = await this.client.get<{
+        organisationUnitLevels?: Array<{ id: string; level: number; name: string }>;
+      }>(`api/organisationUnitLevels`, {
+        params: {
+          filter: `level:eq:${level}`,
+          paging: false,
+        },
+      });
+      const levels = response.data?.organisationUnitLevels || [];
+      return levels.length > 0;
+    } catch (error) {
+      console.warn(
+        `[Warning] Failed to validate organisation unit level ${level}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Fetch organisation units at a given level under a parent org unit
+   */
+  async getOrgUnitsByLevel(
+    parentOrgUnitId: string,
+    level: number = 4,
+  ): Promise<OrganisationUnit[]> {
     const response = await this.client.get<{
       organisationUnits: OrganisationUnit[];
     }>(`api/organisationUnits`, {
       params: {
         fields: "id,name",
         filter: `path:like:${parentOrgUnitId}`,
-        level: 4,
+        level: level,
         paging: false,
       },
     });

@@ -70,7 +70,7 @@ The CLI supports two subcommands:
 
 ```bash
 # Audit command (default)
-pnpm start audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [-o <outputFilename>]
+pnpm start audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [-l <level>] [-o <outputFilename>]
 
 # Revert command (with optional --dry-run)
 pnpm start revert -p <parentOrgUnitId> -d <dataSetId> -e <periods> [--dry-run]
@@ -80,31 +80,38 @@ OR with long form of the options:
 
 ```
 # Audit command (default)
-pnpm start audit --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--output <outputFilename>]
+pnpm start audit --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--level <level>] [--output <outputFilename>]
 
 # Revert command (with optional --dry-run)
-pnpm start revert --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--dry-run]
+pnpm start revert --parentOrgUnit --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--dry-run]
 ```
 
 ### CLI Options
 
-| Option            | Shorthand | Required (Audit/Revert) | Description                                                               |
-| :---------------- | :-------- | :---------------------- | :------------------------------------------------------------------------ |
-| `--parentOrgUnit` | `-p`      | **Yes**                 | Parent Organisation Unit ID (fetches level 4 districts under this parent) |
-| `--dataSet`       | `-d`      | **Yes**                 | DHIS2 Dataset ID                                                          |
-| `--periods`       | `-e`      | **Yes**                 | Comma-separated list of periods (e.g. `2026` or `202601,202602`)          |
-| `--output`        | `-o`      | No (Audit only)         | Output Excel file path (default: `dataset_audit_report.xlsx`)             |
-| `--baseUrl`       |           | No                      | DHIS2 Base URL (overrides `DHIS2_BASE_URL` in `.env`)                     |
-| `--dry-run`       |           | No (Revert only)        | Preview values to revert without posting changes to DHIS2                 |
-| `--help`          | `-h`      | No                      | Display CLI help menu                                                     |
+| Option            | Shorthand | Required (Audit / Revert) | Description                                                               |
+| :---------------- | :-------- | :------------------------ | :------------------------------------------------------------------------ |
+| `--parentOrgUnit` | `-p`      | **Yes** / **Yes**         | Parent Organisation Unit ID                                               |
+| `--dataSet`       | `-d`      | **Yes** / **Yes**         | DHIS2 Dataset ID                                                          |
+| `--periods`       | `-e`      | **Yes** / **Yes**         | Comma-separated list of periods (e.g. `2026` or `202601,202602`)          |
+| `--level`         | `-l`      | No / No (Audit only)      | Organisation Unit Level to target (defaults to `4`). Validated in DHIS2.  |
+| `--output`        | `-o`      | No (Audit only)           | Base output Excel filename (automatically prefixed with `[parentOrgUnit]_[periods]_`) |
+| `--baseUrl`       |           | No / No                   | DHIS2 Base URL (overrides `DHIS2_BASE_URL` in `.env`)                     |
+| `--dry-run`       |           | No (Revert only)          | Preview values to revert without posting changes to DHIS2                 |
+| `--help`          | `-h`      | No / No                   | Display CLI help menu                                                     |
+
+> **Note on Output Filenames**:
+> Audit reports are saved inside the `output/` directory with a prefix incorporating the parent org unit ID and period list: `[parentOrgUnit]_[periods]_[filename]`.
+> For example: `QuGXmXjGx2o_202601-202602_dataset_audit_report.xlsx`.
 
 ### Example Commands
 
-#### Audit Command (Single or Multiple Periods)
+#### Audit Command (Single or Multiple Periods, Optional Level)
 
 ```bash
-pnpm start audit -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026 -o audit_report_2026.xlsx
-pnpm start -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602,202603 # audit is default
+pnpm start audit -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602 -l 4 -o dataset_audit_report.xlsx
+# Saves to: output/QuGXmXjGx2o_202601-202602_dataset_audit_report.xlsx
+
+pnpm start -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602 # audit is default (level 4)
 ```
 
 #### Revert Command

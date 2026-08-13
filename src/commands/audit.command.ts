@@ -24,6 +24,11 @@ export class AuditCommand implements ICLICommand {
         "Comma-separated list of periods (e.g. 2026 or 202601,202602)",
       )
       .option(
+        "-l, --level <level>",
+        "Organisation Unit Level to target (defaults to 4)",
+        "4",
+      )
+      .option(
         "-o, --output <filename>",
         "Output Excel filename",
         "dataset_audit_report.xlsx",
@@ -62,10 +67,17 @@ export class AuditCommand implements ICLICommand {
           process.exit(1);
         }
 
+        const level = parseInt(options.level, 10);
+        if (isNaN(level) || level <= 0) {
+          console.error("Error: Organisation unit level must be a valid positive number.");
+          process.exit(1);
+        }
+
         await this.auditService.execute({
           parentOrgUnit: options.parentOrgUnit,
           dataSet: options.dataSet,
           periods: periodsList,
+          level,
           output: options.output,
           baseUrl,
           username,

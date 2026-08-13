@@ -2,6 +2,7 @@ export interface AuditOptions {
   parentOrgUnit: string;
   dataSet: string;
   periods: string[];
+  level?: number;
   output: string;
   baseUrl: string;
   username?: string;

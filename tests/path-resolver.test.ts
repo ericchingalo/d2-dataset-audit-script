@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import path from "path";
-import { resolveOutputPath } from "../src/utils/path-resolver.js";
+import { resolveOutputPath, formatPrefixedOutputPath } from "../src/utils/path-resolver.js";
 
 describe("resolveOutputPath", () => {
   it("prefixes simple filename with output/ directory", () => {
@@ -19,5 +19,17 @@ describe("resolveOutputPath", () => {
     const absPath = path.resolve("custom_folder", "report.xlsx");
     const resolved = resolveOutputPath(absPath);
     expect(resolved).toBe(absPath);
+  });
+});
+
+describe("formatPrefixedOutputPath", () => {
+  it("prefixes filename with orgunit and periods in output/ directory", () => {
+    const output = formatPrefixedOutputPath("report.xlsx", "OU123", ["202601", "202602"]);
+    expect(output).toBe(path.join("output", "OU123_202601-202602_report.xlsx"));
+  });
+
+  it("handles single period and custom dir path", () => {
+    const output = formatPrefixedOutputPath("custom_folder/report.xlsx", "OU123", ["202601"]);
+    expect(output).toBe(path.join("output", "custom_folder", "OU123_202601_report.xlsx"));
   });
 });
