@@ -7,6 +7,7 @@ export interface ParsedAuditRow {
   period: string;
   currentValue: string;
   previousValue: string;
+  lastUpdated?: string;
 }
 
 export async function readAuditReportExcel(filePath: string): Promise<ParsedAuditRow[]> {
@@ -28,6 +29,7 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
     let disaggregationColIndex = -1;
     let periodColIndex = -1;
     let currentValueColIndex = -1;
+    let lastUpdatedColIndex = -1;
     let previousValue1ColIndex = -1;
 
     headerRow.eachCell((cell, colNumber) => {
@@ -36,6 +38,7 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
       if (headerText === 'disaggregation') disaggregationColIndex = colNumber;
       if (headerText === 'period') periodColIndex = colNumber;
       if (headerText === 'current value') currentValueColIndex = colNumber;
+      if (headerText === 'last updated') lastUpdatedColIndex = colNumber;
       if (headerText === 'previous value 1') previousValue1ColIndex = colNumber;
     });
 
@@ -71,6 +74,16 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
           ? String(previousValueRaw).trim()
           : '';
 
+      let lastUpdated = '';
+      if (lastUpdatedColIndex !== -1) {
+        const rawLastUpdated = row.getCell(lastUpdatedColIndex).value;
+        if (rawLastUpdated instanceof Date) {
+          lastUpdated = rawLastUpdated.toISOString();
+        } else if (rawLastUpdated !== null && rawLastUpdated !== undefined) {
+          lastUpdated = String(rawLastUpdated).trim();
+        }
+      }
+
       if (dataElementName && period && previousValue !== '') {
         results.push({
           orgUnitName,
@@ -79,6 +92,7 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
           period,
           currentValue,
           previousValue,
+          lastUpdated,
         });
       }
     });

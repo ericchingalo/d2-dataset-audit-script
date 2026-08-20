@@ -190,4 +190,133 @@ describe('RevertService', () => {
     expect(mockPostDataValueSets.mock.calls[1][0].dataValues.length).toBe(50);
     expect(result.importSummary?.importCount?.updated).toBe(150);
   });
+
+  it('filters rows by lastUpdated date inclusively and excludes prior or empty dates', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+
+    const parsedRows = [
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '100',
+        previousValue: '90',
+        lastUpdated: '2026-08-15T08:30:00.000Z', // on date -> included
+      },
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 2',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '80',
+        previousValue: '70',
+        lastUpdated: '2026-08-16T10:00:00.000Z', // after date -> included
+      },
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 3',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '50',
+        previousValue: '40',
+        lastUpdated: '2026-08-14T23:59:59.000Z', // before date -> excluded
+      },
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 4',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '20',
+        previousValue: '10',
+        lastUpdated: '', // missing -> excluded
+      },
+    ];
+
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue(parsedRows);
+
+    const mockPostDataValueSets = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      importCount: { imported: 0, updated: 2, ignored: 0, deleted: 0 },
+    });
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        dataSetElements: [
+          { dataElement: { id: 'de1', name: 'Data Element 1' } },
+          { dataElement: { id: 'de2', name: 'Data Element 2' } },
+          { dataElement: { id: 'de3', name: 'Data Element 3' } },
+          { dataElement: { id: 'de4', name: 'Data Element 4' } },
+        ],
+      }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+      lastUpdated: '2026-08-15',
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.totalReverted).toBe(2);
+    expect(mockPostDataValueSets).toHaveBeenCalledTimes(1);
+    expect(mockPostDataValueSets.mock.calls[0][0].dataValues).toEqual([
+      expect.objectContaining({ dataElement: 'de1', value: '90' }),
+      expect.objectContaining({ dataElement: 'de2', value: '70' }),
+    ]);
+  });
+
+  it('returns NO_CHANGES if all rows are prior to lastUpdated date', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+
+    const parsedRows = [
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        period: '202601',
+        currentValue: '100',
+        previousValue: '90',
+        lastUpdated: '2026-08-10T08:30:00.000Z',
+      },
+    ];
+
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue(parsedRows);
+
+    const mockPostDataValueSets = vi.fn();
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
+      }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+      lastUpdated: '2026-08-15',
+    });
+
+    expect(result.status).toBe('NO_CHANGES');
+    expect(result.totalReverted).toBe(0);
+    expect(mockPostDataValueSets).not.toHaveBeenCalled();
+  });
 });

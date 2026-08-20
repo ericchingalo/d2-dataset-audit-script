@@ -23,6 +23,10 @@ export function normalizeArgs(args: string[]): string[] {
       return arg.replace(/^--?(lvl|level)=/, '--level=');
     }
     if (arg === '-lvl' || arg === '--lvl' || arg === '-level') return '--level';
+    if (arg.startsWith('-lu=') || arg.startsWith('--lu=')) {
+      return arg.replace(/^--?lu=/, '--lastUpdated=');
+    }
+    if (arg === '-lu' || arg === '--lu') return '--lastUpdated';
     return arg;
   });
 }

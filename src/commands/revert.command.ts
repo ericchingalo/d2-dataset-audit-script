@@ -28,6 +28,10 @@ export class RevertCommand implements ICLICommand {
         "Specific output Excel filename to revert from",
       )
       .option(
+        "-l, --lastUpdated <date>",
+        "Revert only values last updated on or after this date (YYYY-MM-DD)",
+      )
+      .option(
         "--baseUrl <url>",
         "DHIS2 Base URL (overrides DHIS2_BASE_URL env variable)",
       )
@@ -62,11 +66,32 @@ export class RevertCommand implements ICLICommand {
           process.exit(1);
         }
 
+        if (options.lastUpdated) {
+          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          if (!dateRegex.test(options.lastUpdated)) {
+            console.error(
+              `Error: Invalid --lastUpdated date format: "${options.lastUpdated}". Expected YYYY-MM-DD.`,
+            );
+            process.exit(1);
+          }
+          const parsedDate = new Date(`${options.lastUpdated}T00:00:00Z`);
+          if (
+            isNaN(parsedDate.getTime()) ||
+            parsedDate.toISOString().slice(0, 10) !== options.lastUpdated
+          ) {
+            console.error(
+              `Error: Invalid --lastUpdated date: "${options.lastUpdated}". Please provide a valid calendar date.`,
+            );
+            process.exit(1);
+          }
+        }
+
         await this.revertService.execute({
           parentOrgUnit: options.parentOrgUnit,
           dataSet: options.dataSet,
           periods: periodsList,
           output: options.output,
+          lastUpdated: options.lastUpdated,
           baseUrl,
           username,
           password,

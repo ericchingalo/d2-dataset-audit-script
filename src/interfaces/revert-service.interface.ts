@@ -10,6 +10,7 @@ export interface RevertOptions {
   password?: string;
   patToken?: string;
   dryRun?: boolean;
+  lastUpdated?: string;
 }
 
 export interface RevertResult {

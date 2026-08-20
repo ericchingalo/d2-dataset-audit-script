@@ -9,6 +9,7 @@ describe("CLI Argument Normalization", () => {
       "-ou=SkCh5O8W0No",
       "-ds=WqMbv5DkReA",
       "-pe=2026,2025",
+      "-lu=2026-08-15",
     ];
     const expected = [
       "node",
@@ -16,6 +17,7 @@ describe("CLI Argument Normalization", () => {
       "--parentOrgUnit=SkCh5O8W0No",
       "--dataSet=WqMbv5DkReA",
       "--periods=2026,2025",
+      "--lastUpdated=2026-08-15",
     ];
     expect(normalizeArgs(input)).toEqual(expected);
   });

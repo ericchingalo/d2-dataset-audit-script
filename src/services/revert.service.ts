@@ -14,7 +14,10 @@ import { Dhis2ApiClient } from "./dhis2-api.js";
 import { DataValue } from "../types/dhis2.js";
 import { generateImportReport } from "../utils/import-report.js";
 import { readAuditReportExcel } from "./excel-reader.js";
-import { formatPrefixedOutputPath, resolveOutputPath } from "../utils/path-resolver.js";
+import {
+  formatPrefixedOutputPath,
+  resolveOutputPath,
+} from "../utils/path-resolver.js";
 import { sanitizeSheetName } from "./excel-exporter.js";
 
 export type Dhis2ClientFactory = (config: Dhis2ClientConfig) => IDhis2ApiClient;
@@ -41,6 +44,9 @@ export class RevertService implements IRevertService {
     }
     if (options.periods && options.periods.length > 0) {
       console.log(`Periods:        ${options.periods.join(", ")}`);
+    }
+    if (options.lastUpdated) {
+      console.log(`Last Updated:   >= ${options.lastUpdated}`);
     }
     if (options.dryRun) {
       console.log(`Mode:           DRY RUN (No data will be posted to DHIS2)`);
@@ -143,9 +149,8 @@ export class RevertService implements IRevertService {
     if (dataSetMeta.dataSetElements) {
       for (const dse of dataSetMeta.dataSetElements) {
         if (dse.dataElement) {
-          dataElementNameToIdMap[
-            dse.dataElement.name.trim().toLowerCase()
-          ] = dse.dataElement.id;
+          dataElementNameToIdMap[dse.dataElement.name.trim().toLowerCase()] =
+            dse.dataElement.id;
         }
       }
     }
@@ -171,12 +176,29 @@ export class RevertService implements IRevertService {
       const parsedRows = await readAuditReportExcel(filePath);
 
       for (const row of parsedRows) {
-        const deId =
-          dataElementNameToIdMap[row.dataElementName.toLowerCase()];
-        const ouId =
-          orgUnitNameToIdMap[row.orgUnitName.toLowerCase()];
-        const cocId =
-          cocNameToIdMap[row.disaggregationName.toLowerCase()];
+        if (options.lastUpdated) {
+          if (!row.lastUpdated) {
+            continue;
+          }
+          const rowDateStr = row.lastUpdated.slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(rowDateStr)) {
+            if (rowDateStr < options.lastUpdated) {
+              continue;
+            }
+          } else {
+            const rowTime = new Date(row.lastUpdated).getTime();
+            const filterTime = new Date(
+              `${options.lastUpdated}T00:00:00Z`,
+            ).getTime();
+            if (isNaN(rowTime) || rowTime < filterTime) {
+              continue;
+            }
+          }
+        }
+
+        const deId = dataElementNameToIdMap[row.dataElementName.toLowerCase()];
+        const ouId = orgUnitNameToIdMap[row.orgUnitName.toLowerCase()];
+        const cocId = cocNameToIdMap[row.disaggregationName.toLowerCase()];
 
         if (!deId) {
           console.warn(
@@ -201,10 +223,9 @@ export class RevertService implements IRevertService {
           dataElement: deId,
           period: row.period,
           orgUnit: ouId,
-          categoryOptionCombo:
-            cocId && cocId !== "default" ? cocId : undefined,
+          categoryOptionCombo: cocId && cocId !== "default" ? cocId : undefined,
           value: row.previousValue,
-          comment: `Reverted to previous value from ${row.currentValue} via audit report (${path.basename(filePath)})`,
+          comment: `Reverted to previous value from ${row.currentValue} after dataset audit`,
         });
       }
     }
