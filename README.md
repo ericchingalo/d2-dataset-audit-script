@@ -1,20 +1,23 @@
-# DHIS2 Dataset Audit Excel Generator
+# DHIS2 Dataset Audit & Revert CLI Tool
 
-A TypeScript Node.js CLI tool built with `pnpm` that fetches dataset values and audit logs from a DHIS2 instance, merges update audit histories with filled data values, and generates a formatted Excel report grouped into district sheets.
+A TypeScript Node.js CLI tool that connects to a DHIS2 instance to:
+1. **Audit dataset changes**: Fetch data values and update audit logs, merge historical changes, and export a formatted Excel workbook grouped by district sheets.
+2. **Revert dataset changes**: Read generated audit Excel report(s) and restore modified data values to their previous state in DHIS2 (`api/dataValueSets`), with support for dry-run preview and date-based filtering.
+
+---
 
 ## Features
 
-- **District Grouping**: Grouped into Excel sheets based on level 4 districts under a specified parent organisation unit.
-- **Audit History Merging**: Combines current data values with audit history (`UPDATE` audit types) to reconstruct the modification trail.
-- **Filtered Output**: Includes only data elements and values that have audit update history.
-- **Sorted Data**: Rows within each sheet are sorted by **Period** (descending), **Data Element Name** (alphabetically), and **Disaggregation**.
-- **Dynamic Excel Layout**:
-  - Auto-calculated dynamic horizontal columns for audit history: `Previous Value 1`, `Edited By (Prev 1)`, `Date (Prev 1)`, `Previous Value 2`, `Edited By (Prev 2)`, `Date (Prev 2)`, etc.
-  - Formatted headers, frozen top pane, and auto-adjusted column widths.
-  - Automated sheet name sanitization (31-character limit and character cleanup).
-
-- **Dataset Value Reverting**: Automatically inspects audit history for modified data value cells, targets the previous latest value (`history[0].value`), and posts updates back to DHIS2 via `api/dataValueSets`.
-- **Dry-Run Mode**: Allows previewing revert candidates before executing network posts to DHIS2.
+- **District-Level Organization**: Generates Excel sheets for organisation units (districts) under a specified parent organisation unit.
+- **Audit History Reconstruction**: Merges current dataset values with `UPDATE` audit logs to display the full modification history.
+- **Dynamic Excel Report**:
+  - Automatically adds historical columns: `Previous Value 1`, `Edited By (Prev 1)`, `Date (Prev 1)`, `Previous Value 2`, etc.
+  - Formats headers, freezes the top row, auto-fits column widths, and sanitizes sheet names.
+- **Safe Reverting**:
+  - Restores the immediate prior value (`Previous Value 1`) directly back to DHIS2.
+  - **Date Filtering (`--lastUpdated`)**: Filter and revert only records modified on or after a specified date (`YYYY-MM-DD`).
+  - **Dry-Run Mode**: Preview what values will be posted to DHIS2 without performing any network write operations.
+  - **Batching**: Automatically batches updates in chunks of 100 data values to avoid payload limits.
 
 ---
 
@@ -25,143 +28,168 @@ A TypeScript Node.js CLI tool built with `pnpm` that fetches dataset values and 
 
 ---
 
-## Installation
+## Installation & Setup
 
-Clone the repository and install dependencies using `pnpm`:
+1. **Clone the repository and install dependencies**:
+   ```bash
+   pnpm install
+   ```
 
-```bash
-pnpm install
+2. **Configure environment variables**:
+   Create a `.env` file from the template:
+   ```bash
+   cp .env.example .env
+   ```
+
+   Update `.env` with your DHIS2 credentials:
+   ```env
+   # DHIS2 Server Configuration
+   DHIS2_BASE_URL=https://your-dhis2-instance.org
+
+   # Basic Auth
+   DHIS2_USERNAME=admin
+   DHIS2_PASSWORD=district
+
+   # Or Personal Access Token (PAT)
+   # DHIS2_PAT_TOKEN=d2pat_xxxxxx
+   ```
+
+---
+
+## Supported Scripts
+
+The CLI supports two primary commands:
+- [`audit`](#1-audit-script): Generate an audit report Excel file.
+- [`revert`](#2-revert-script): Revert modified values using an audit report Excel file.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       CLI Workflows                         │
+├─────────────────────────────────────────────────────────────┤
+│ 1. RUN AUDIT                                                │
+│    pnpm start-audit -p <parentOrgUnit> -d <dataSet> -e <pe> │
+│    └─► Generates output/<parentOrgUnit>_<pe>_report.xlsx    │
+│                                                             │
+│ 2. PREVIEW / REVERT                                         │
+│    pnpm start-revert -p <parentOrgUnit> -d <dataSet> -e <pe>│
+│    └─► Reads generated report and restores previous values  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Configuration
+### 1. Audit Script
 
-Copy `.env.example` to create a `.env` file in the project root:
+Fetches data values and audit logs from DHIS2, identifies edited cells, and produces a styled Excel report.
 
+#### Command Syntax
 ```bash
-cp .env.example .env
+# Using npm/pnpm script shortcut
+pnpm start-audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [options]
+
+# Or using general CLI runner
+pnpm start audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [options]
 ```
 
-Configure your DHIS2 credentials in `.env`:
+#### Audit Options
 
-```env
-# DHIS2 Server Configuration
-DHIS2_BASE_URL=https://your-dhis2-instance.org
+| Option | Shorthand | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `--parentOrgUnit <id>` | `-p` | **Yes** | Parent Organisation Unit ID |
+| `--dataSet <id>` | `-d` | **Yes** | DHIS2 Dataset ID |
+| `--periods <periods>` | `-e` | **Yes** | Comma-separated list of periods (e.g. `2026` or `202601,202602`) |
+| `--level <level>` | `-l` | No | Organisation unit level to target under parent (defaults to `4`) |
+| `--output <filename>` | `-o` | No | Output Excel file name (saved under `output/` with prefix `[parentOrgUnit]_[periods]_`) |
+| `--baseUrl <url>` | | No | Override DHIS2 Base URL from `.env` |
+| `--help` | `-h` | No | Show help menu |
 
-# Basic Auth Credentials
-DHIS2_USERNAME=admin
-DHIS2_PASSWORD=district
+#### Audit Examples
+```bash
+# Basic audit for a single period
+pnpm start-audit -p SkCh5O8W0No -d WqMbv5DkReA -e 202601
 
-# Or Personal Access Token (PAT)
-# DHIS2_PAT_TOKEN=d2pat_xxxxxx
+# Audit multiple periods with custom level and custom output file
+pnpm start-audit -p SkCh5O8W0No -d WqMbv5DkReA -e 202601,202602 -l 4 -o dataset_audit.xlsx
+# Output file saved to: output/SkCh5O8W0No_202601-202602_dataset_audit.xlsx
 ```
 
 ---
 
-## Usage
+### 2. Revert Script
 
-The CLI supports two subcommands:
+Reads the audit report Excel file(s) generated by the audit command, maps names back to DHIS2 identifiers, and posts the `Previous Value 1` values back to DHIS2 (`api/dataValueSets`).
 
-1. **`audit`** (default): Generates the Excel audit report.
-2. **`revert`**: Reverts dataset values to their previous latest state before modifications.
-
-### Command Syntax
-
+#### Command Syntax
 ```bash
-# Audit command (default)
-pnpm start audit -p <parentOrgUnitId> -d <dataSetId> -e <periods> [-l <level>] [-o <outputFilename>]
+# Using npm/pnpm script shortcut
+pnpm start-revert -p <parentOrgUnitId> -d <dataSetId> -e <periods> [options]
 
-# Revert command (with optional --dry-run)
-pnpm start revert -p <parentOrgUnitId> -d <dataSetId> -e <periods> [--dry-run]
+# Or using general CLI runner
+pnpm start revert -p <parentOrgUnitId> -d <dataSetId> -e <periods> [options]
 ```
 
-OR with long form of the options:
+#### Revert Options
 
-```
-# Audit command (default)
-pnpm start audit --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--level <level>] [--output <outputFilename>]
+| Option | Shorthand | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `--parentOrgUnit <id>` | `-p` | **Yes** | Parent Organisation Unit ID (used to match report file prefix) |
+| `--dataSet <id>` | `-d` | **Yes** | DHIS2 Dataset ID |
+| `--periods <periods>` | `-e` | **Yes** | Comma-separated periods matching the audit report |
+| `--lastUpdated <YYYY-MM-DD>` | `-l` | No | Revert only values last updated on or after this date (inclusive) |
+| `--dry-run` | | No | Preview candidates and statistics without posting changes to DHIS2 |
+| `--output <filename>` | `-o` | No | Target a specific audit report Excel file to revert from |
+| `--baseUrl <url>` | | No | Override DHIS2 Base URL from `.env` |
+| `--help` | `-h` | No | Show help menu |
 
-# Revert command (with optional --dry-run)
-pnpm start revert --parentOrgUnit --parentOrgUnit <parentOrgUnitId> --dataSet <dataSetId> --periods <periods> [--dry-run]
-```
-
-### CLI Options
-
-| Option            | Shorthand | Required (Audit / Revert) | Description                                                               |
-| :---------------- | :-------- | :------------------------ | :------------------------------------------------------------------------ |
-| `--parentOrgUnit` | `-p`      | **Yes** / **Yes**         | Parent Organisation Unit ID                                               |
-| `--dataSet`       | `-d`      | **Yes** / **Yes**         | DHIS2 Dataset ID                                                          |
-| `--periods`       | `-e`      | **Yes** / **Yes**         | Comma-separated list of periods (e.g. `2026` or `202601,202602`)          |
-| `--level`         | `-l`      | No / No (Audit only)      | Organisation Unit Level to target (defaults to `4`). Validated in DHIS2.  |
-| `--output`        | `-o`      | No (Audit only)           | Base output Excel filename (automatically prefixed with `[parentOrgUnit]_[periods]_`) |
-| `--baseUrl`       |           | No / No                   | DHIS2 Base URL (overrides `DHIS2_BASE_URL` in `.env`)                     |
-| `--dry-run`       |           | No (Revert only)          | Preview values to revert without posting changes to DHIS2                 |
-| `--help`          | `-h`      | No / No                   | Display CLI help menu                                                     |
-
-> **Note on Output Filenames**:
-> Audit reports are saved inside the `output/` directory with a prefix incorporating the parent org unit ID and period list: `[parentOrgUnit]_[periods]_[filename]`.
-> For example: `QuGXmXjGx2o_202601-202602_dataset_audit_report.xlsx`.
-
-### Example Commands
-
-#### Audit Command (Single or Multiple Periods, Optional Level)
-
+#### Revert Examples
 ```bash
-pnpm start audit -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602 -l 4 -o dataset_audit_report.xlsx
-# Saves to: output/QuGXmXjGx2o_202601-202602_dataset_audit_report.xlsx
+# 1. Preview changes before posting (Dry Run)
+pnpm start-revert -p SkCh5O8W0No -d WqMbv5DkReA -e 202601 --dry-run
 
-pnpm start -p QuGXmXjGx2o -d WqMbv5DkReA -e 202601,202602 # audit is default (level 4)
+# 2. Revert all modified data values from the report
+pnpm start-revert -p SkCh5O8W0No -d WqMbv5DkReA -e 202601
+
+# 3. Revert only data values modified on or after a specific date (e.g. 2026-08-15)
+pnpm start-revert -p SkCh5O8W0No -d WqMbv5DkReA -e 202601 -l 2026-08-15
+
+# 4. Revert from a specific Excel file with dry-run
+pnpm start-revert -p SkCh5O8W0No -d WqMbv5DkReA -e 202601 -o my_audit_report.xlsx --dry-run
 ```
 
-#### Revert Command
+---
 
-```bash
-# Preview values to be reverted without making changes in DHIS2
-pnpm start revert -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026 --dry-run
+## Excel Report Structure
 
-# Revert edited data values to previous state in DHIS2
-pnpm start revert -p QuGXmXjGx2o -d WqMbv5DkReA -e 2026
-```
+Each sheet in the generated workbook corresponds to a district (organisation unit).
+
+| Column Header | Description |
+| :--- | :--- |
+| **Data Element** | Name of the DHIS2 Data Element |
+| **Disaggregation** | Category Option Combo name (e.g. `default`, `< 5 Years, Female`) |
+| **Period** | DHIS2 Period ID (e.g. `2026`, `202601`) |
+| **Current Value** | Value currently stored in DHIS2 |
+| **Modified By** | Username of user who last modified the value |
+| **Last Updated** | Timestamp when the value was last saved |
+| **Previous Value 1** | Immediate prior value before the latest change (*reverted target*) |
+| **Edited By (Prev 1)** | Username who set Previous Value 1 |
+| **Date (Prev 1)** | Timestamp when Previous Value 1 was created |
+| **Previous Value 2...** | Older values in chronological order (newest to oldest) |
 
 ---
 
 ## Development & Testing
 
 ### Build TypeScript
-
-Compiles TypeScript files in `src/` to `dist/`:
-
+Compile TypeScript source files in `src/` to `dist/`:
 ```bash
 pnpm build
 ```
 
 ### Run Unit Tests
-
-Executes unit tests using `vitest`:
-
+Execute the Vitest test suite:
 ```bash
 pnpm test
 ```
-
----
-
-## Excel Structure
-
-Each district gets its own sheet in the generated Excel report.
-
-| Column Header           | Description                                             |
-| :---------------------- | :------------------------------------------------------ |
-| **Data Element**        | Name of the DHIS2 Data Element (sorted alphabetically)  |
-| **Disaggregation**      | Category Option Combo name (e.g. `< 5 Years`, `Male`)   |
-| **Period**              | DHIS2 Period ID (e.g. `2026`, `202601`)                 |
-| **Current Value**       | Latest stored data value                                |
-| **Modified By**         | Username of person who last updated the value           |
-| **Last Updated**        | Timestamp of the latest modification                    |
-| **Previous Value 1**    | Immediate prior value before latest edit                |
-| **Edited By (Prev 1)**  | Username who performed Previous Edit 1                  |
-| **Date (Prev 1)**       | Timestamp of Previous Edit 1                            |
-| **Previous Value 2...** | Older values ordered chronologically (newest to oldest) |
 
 ---
 
