@@ -16,7 +16,7 @@ export class AuditCommand implements ICLICommand {
       .description("Generate DHIS2 dataset audit report")
       .requiredOption(
         "-p, --parentOrgUnit <id>",
-        "Parent Organisation Unit ID (fetches level 4 districts under this parent)",
+        "Organisation Unit ID(s) (comma-separated, or parent IDs if --level is specified)",
       )
       .requiredOption("-d, --dataSet <id>", "DHIS2 Dataset ID")
       .requiredOption(
@@ -25,8 +25,7 @@ export class AuditCommand implements ICLICommand {
       )
       .option(
         "-l, --level <level>",
-        "Organisation Unit Level to target (defaults to 4)",
-        "4",
+        "Organisation Unit Level to target (optional; if omitted, targets only the parent organisation unit)",
       )
       .option(
         "-o, --output <filename>",
@@ -67,10 +66,13 @@ export class AuditCommand implements ICLICommand {
           process.exit(1);
         }
 
-        const level = parseInt(options.level, 10);
-        if (isNaN(level) || level <= 0) {
-          console.error("Error: Organisation unit level must be a valid positive number.");
-          process.exit(1);
+        let level: number | undefined;
+        if (options.level !== undefined) {
+          level = parseInt(options.level, 10);
+          if (isNaN(level) || level <= 0) {
+            console.error("Error: Organisation unit level must be a valid positive number.");
+            process.exit(1);
+          }
         }
 
         await this.auditService.execute({

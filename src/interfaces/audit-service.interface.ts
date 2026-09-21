@@ -1,5 +1,5 @@
 export interface AuditOptions {
-  parentOrgUnit: string;
+  parentOrgUnit: string | string[];
   dataSet: string;
   periods: string[];
   level?: number;

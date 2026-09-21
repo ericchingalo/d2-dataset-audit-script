@@ -69,11 +69,29 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
   }
 
   /**
+   * Fetch a single organisation unit by its ID
+   */
+  async getOrgUnitById(id: string): Promise<OrganisationUnit> {
+    const response = await this.client.get<OrganisationUnit>(
+      `api/organisationUnits/${id}`,
+      {
+        params: {
+          fields: "id,name",
+        },
+      },
+    );
+    if (!response.data || !response.data.id) {
+      throw new Error(`Organisation unit with ID ${id} not found in DHIS2.`);
+    }
+    return response.data;
+  }
+
+  /**
    * Fetch organisation units at a given level under a parent org unit
    */
   async getOrgUnitsByLevel(
     parentOrgUnitId: string,
-    level: number = 4,
+    level: number,
   ): Promise<OrganisationUnit[]> {
     const response = await this.client.get<{
       organisationUnits: OrganisationUnit[];

@@ -1,7 +1,7 @@
 import { DataValueImportSummary } from '../types/dhis2.js';
 
 export interface RevertOptions {
-  parentOrgUnit?: string;
+  parentOrgUnit?: string | string[];
   dataSet?: string;
   periods?: string[];
   output?: string;
@@ -11,6 +11,7 @@ export interface RevertOptions {
   patToken?: string;
   dryRun?: boolean;
   lastUpdated?: string;
+  level?: number;
 }
 
 export interface RevertResult {

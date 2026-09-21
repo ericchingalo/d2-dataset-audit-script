@@ -9,7 +9,7 @@ import { IReportExporter } from '../interfaces/report-exporter.interface.js';
 import { Dhis2ApiClient } from './dhis2-api.js';
 import { ExcelExporter } from './excel-exporter.js';
 import { mergeAuditData } from './audit-merger.js';
-import { MergedAuditRow } from '../types/dhis2.js';
+import { MergedAuditRow, OrganisationUnit } from '../types/dhis2.js';
 import { formatPrefixedOutputPath } from '../utils/path-resolver.js';
 
 export type Dhis2ClientFactory = (config: Dhis2ClientConfig) => IDhis2ApiClient;
@@ -28,10 +28,24 @@ export class AuditService implements IAuditService {
   }
 
   async execute(options: AuditOptions): Promise<AuditResult> {
-    const level = options.level ?? 4;
+    const level = options.level;
+    const parentOrgUnits = Array.isArray(options.parentOrgUnit)
+      ? options.parentOrgUnit.map((id) => id.trim()).filter(Boolean)
+      : options.parentOrgUnit
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean);
+
+    if (parentOrgUnits.length === 0) {
+      const errorMsg =
+        "Error: At least one parent organisation unit ID must be specified.";
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
     const finalOutputPath = formatPrefixedOutputPath(
       options.output,
-      options.parentOrgUnit,
+      parentOrgUnits,
       options.periods
     );
 
@@ -44,26 +58,58 @@ export class AuditService implements IAuditService {
 
     console.log("--- DHIS2 Dataset Audit Generator ---");
     console.log(`Base URL:       ${options.baseUrl}`);
-    console.log(`Parent OrgUnit: ${options.parentOrgUnit}`);
-    console.log(`OrgUnit Level:  ${level}`);
+    console.log(`Parent OrgUnit: ${parentOrgUnits.join(", ")}`);
+    console.log(
+      `OrgUnit Level:  ${level !== undefined ? level : "Not specified (targeting parent org unit)"}`
+    );
     console.log(`DataSet ID:     ${options.dataSet}`);
     console.log(`Periods:        ${options.periods.join(", ")}`);
     console.log(`Output File:    ${finalOutputPath}\n`);
 
-    // Step 0: Validate OrgUnit Level
-    console.log(`Validating organisation unit level ${level} in DHIS2...`);
-    const isValidLevel = await client.validateOrgUnitLevel(level);
-    if (!isValidLevel) {
-      const errorMsg = `Error: Organisation unit level ${level} does not exist in DHIS2. Terminating process.`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
-    }
-    console.log(`Level ${level} verified.\n`);
+    let orgUnits: OrganisationUnit[] = [];
 
-    // Step 1: Fetch OrgUnits at requested level
-    console.log(`Fetching level ${level} organisation units...`);
-    const orgUnits = await client.getOrgUnitsByLevel(options.parentOrgUnit, level);
-    console.log(`Found ${orgUnits.length} organisation unit(s).\n`);
+    if (level !== undefined) {
+      // Step 0: Validate OrgUnit Level
+      console.log(`Validating organisation unit level ${level} in DHIS2...`);
+      const isValidLevel = await client.validateOrgUnitLevel(level);
+      if (!isValidLevel) {
+        const errorMsg = `Error: Organisation unit level ${level} does not exist in DHIS2. Terminating process.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      console.log(`Level ${level} verified.\n`);
+
+      // Step 1: Fetch OrgUnits at requested level
+      console.log(
+        `Fetching level ${level} organisation units for ${parentOrgUnits.length} parent org unit(s)...`
+      );
+      const fetchedLists = await Promise.all(
+        parentOrgUnits.map((parentId) => client.getOrgUnitsByLevel(parentId, level))
+      );
+      const allFetched = fetchedLists.flat();
+      const seenIds = new Set<string>();
+      orgUnits = allFetched.filter((ou) => {
+        if (seenIds.has(ou.id)) return false;
+        seenIds.add(ou.id);
+        return true;
+      });
+      console.log(`Found ${orgUnits.length} organisation unit(s).\n`);
+    } else {
+      // Step 1: Fetch Parent OrgUnit directly
+      console.log(`Fetching ${parentOrgUnits.length} organisation unit(s)...`);
+      const fetchedOus = await Promise.all(
+        parentOrgUnits.map((parentId) => client.getOrgUnitById(parentId))
+      );
+      const seenIds = new Set<string>();
+      orgUnits = fetchedOus.filter((ou) => {
+        if (seenIds.has(ou.id)) return false;
+        seenIds.add(ou.id);
+        return true;
+      });
+      console.log(
+        `Found ${orgUnits.length} organisation unit(s): ${orgUnits.map((ou) => `${ou.name} (${ou.id})`).join(", ")}.\n`
+      );
+    }
 
     if (orgUnits.length === 0) {
       console.warn("No organisation units found matching the criteria.");

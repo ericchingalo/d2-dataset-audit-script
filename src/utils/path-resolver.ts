@@ -3,13 +3,20 @@ import fs from 'fs';
 
 export function formatPrefixedOutputPath(
   targetPath: string,
-  parentOrgUnit: string,
+  parentOrgUnit: string | string[],
   periods: string[]
 ): string {
+  const orgUnitStr = Array.isArray(parentOrgUnit)
+    ? parentOrgUnit.map((s) => s.trim()).filter(Boolean).join("_")
+    : parentOrgUnit
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join("_");
   const periodStr = periods.join("-");
   const dir = path.dirname(targetPath);
   const fileBasename = path.basename(targetPath);
-  const prefixedFilename = `${parentOrgUnit}_${periodStr}_${fileBasename}`;
+  const prefixedFilename = `${orgUnitStr}_${periodStr}_${fileBasename}`;
 
   const combinedPath = dir && dir !== "." ? path.join(dir, prefixedFilename) : prefixedFilename;
   return resolveOutputPath(combinedPath);

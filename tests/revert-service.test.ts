@@ -63,6 +63,8 @@ describe('RevertService', () => {
     });
 
     const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({
         id: 'ds1',
@@ -117,6 +119,8 @@ describe('RevertService', () => {
     const mockPostDataValueSets = vi.fn();
 
     const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({
         dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
@@ -167,6 +171,8 @@ describe('RevertService', () => {
     }));
 
     const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements }),
       getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
@@ -242,6 +248,8 @@ describe('RevertService', () => {
     });
 
     const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({
         dataSetElements: [
@@ -296,6 +304,8 @@ describe('RevertService', () => {
     const mockPostDataValueSets = vi.fn();
 
     const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
       getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
       getDataSetMeta: vi.fn().mockResolvedValue({
         dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
@@ -318,5 +328,120 @@ describe('RevertService', () => {
     expect(result.status).toBe('NO_CHANGES');
     expect(result.totalReverted).toBe(0);
     expect(mockPostDataValueSets).not.toHaveBeenCalled();
+  });
+
+  it('uses getOrgUnitsByLevel when level option is provided', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([]);
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn(),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'dist1', name: 'District 1' }]),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: vi.fn(),
+    };
+
+    const service = new RevertService(() => mockClient);
+    await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+      level: 3,
+    });
+
+    expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('parent1', 3);
+    expect(mockClient.getOrgUnitById).not.toHaveBeenCalled();
+  });
+
+  it('uses getOrgUnitById when level option is omitted', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([]);
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'parent1', name: 'Parent OrgUnit' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: vi.fn(),
+    };
+
+    const service = new RevertService(() => mockClient);
+    await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(mockClient.getOrgUnitById).toHaveBeenCalledWith('parent1');
+    expect(mockClient.getOrgUnitsByLevel).not.toHaveBeenCalled();
+  });
+
+  it('supports comma-separated parent org units and matches file prefix', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const readdirSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue(['p1_p2_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([]);
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockImplementation(async (id: string) => ({ id, name: `OrgUnit ${id}` })),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: vi.fn(),
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'p1, p2',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(mockClient.getOrgUnitById).toHaveBeenCalledWith('p1');
+    expect(mockClient.getOrgUnitById).toHaveBeenCalledWith('p2');
+    expect(result.status).toBe('NO_CHANGES');
+  });
+
+  it('supports comma-separated parent org units when level is specified', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['p1_p2_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([]);
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn(),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn().mockResolvedValue([{ id: 'c1', name: 'Child 1' }]),
+      getDataSetMeta: vi.fn().mockResolvedValue({ dataSetElements: [] }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({}),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: vi.fn(),
+    };
+
+    const service = new RevertService(() => mockClient);
+    await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'p1,p2',
+      dataSet: 'ds1',
+      periods: ['202601'],
+      level: 4,
+    });
+
+    expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('p1', 4);
+    expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('p2', 4);
   });
 });

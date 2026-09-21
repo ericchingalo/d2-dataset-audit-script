@@ -16,12 +16,16 @@ export class RevertCommand implements ICLICommand {
       .description("Initiate process to revert dataset values to prior state")
       .requiredOption(
         "-p, --parentOrgUnit <id>",
-        "Parent Organisation Unit ID (fetches level 4 districts under this parent)",
+        "Organisation Unit ID(s) (comma-separated, or parent IDs if --level is specified)",
       )
       .requiredOption("-d, --dataSet <id>", "DHIS2 Dataset ID")
       .requiredOption(
         "-e, --periods <periods>",
         "Comma-separated list of periods (e.g. 2026 or 202601,202602)",
+      )
+      .option(
+        "--level <level>",
+        "Organisation Unit Level targeted during audit (optional; if omitted, targets only the parent organisation unit)",
       )
       .option(
         "-o, --output <filename>",
@@ -86,10 +90,20 @@ export class RevertCommand implements ICLICommand {
           }
         }
 
+        let level: number | undefined;
+        if (options.level !== undefined) {
+          level = parseInt(options.level, 10);
+          if (isNaN(level) || level <= 0) {
+            console.error("Error: Organisation unit level must be a valid positive number.");
+            process.exit(1);
+          }
+        }
+
         await this.revertService.execute({
           parentOrgUnit: options.parentOrgUnit,
           dataSet: options.dataSet,
           periods: periodsList,
+          level,
           output: options.output,
           lastUpdated: options.lastUpdated,
           baseUrl,

@@ -36,8 +36,15 @@ export class RevertService implements IRevertService {
     if (options.baseUrl) {
       console.log(`Base URL:       ${options.baseUrl}`);
     }
-    if (options.parentOrgUnit) {
-      console.log(`Parent OrgUnit: ${options.parentOrgUnit}`);
+    const parentOrgUnits = Array.isArray(options.parentOrgUnit)
+      ? options.parentOrgUnit.map((id) => id.trim()).filter(Boolean)
+      : (options.parentOrgUnit || "")
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean);
+
+    if (parentOrgUnits.length > 0) {
+      console.log(`Parent OrgUnit: ${parentOrgUnits.join(", ")}`);
     }
     if (options.dataSet) {
       console.log(`DataSet ID:     ${options.dataSet}`);
@@ -48,6 +55,11 @@ export class RevertService implements IRevertService {
     if (options.lastUpdated) {
       console.log(`Last Updated:   >= ${options.lastUpdated}`);
     }
+    if (options.level !== undefined) {
+      console.log(`OrgUnit Level:  ${options.level}`);
+    } else {
+      console.log(`OrgUnit Level:  Not specified (targeting parent org unit)`);
+    }
     if (options.dryRun) {
       console.log(`Mode:           DRY RUN (No data will be posted to DHIS2)`);
     }
@@ -57,7 +69,7 @@ export class RevertService implements IRevertService {
 
     if (
       !options.baseUrl ||
-      !options.parentOrgUnit ||
+      parentOrgUnits.length === 0 ||
       !options.dataSet ||
       !options.periods ||
       options.periods.length === 0
@@ -72,13 +84,13 @@ export class RevertService implements IRevertService {
       };
     }
 
-    const prefix = `${options.parentOrgUnit}_${options.periods.join("-")}_`;
+    const prefix = `${parentOrgUnits.join("_")}_${options.periods.join("-")}_`;
     const filesToRead: string[] = [];
 
     if (options.output) {
       const prefixedTarget = formatPrefixedOutputPath(
         options.output,
-        options.parentOrgUnit,
+        parentOrgUnits,
         options.periods,
       );
       if (fs.existsSync(prefixedTarget)) {
@@ -139,8 +151,34 @@ export class RevertService implements IRevertService {
     console.log(
       "Fetching organisation units and dataset metadata for ID mapping...",
     );
+    const orgUnitsPromise =
+      options.level !== undefined
+        ? Promise.all(
+            parentOrgUnits.map((parentId) =>
+              client.getOrgUnitsByLevel(parentId, options.level!)
+            )
+          ).then((lists) => {
+            const all = lists.flat();
+            const seen = new Set<string>();
+            return all.filter((ou) => {
+              if (seen.has(ou.id)) return false;
+              seen.add(ou.id);
+              return true;
+            });
+          })
+        : Promise.all(
+            parentOrgUnits.map((parentId) => client.getOrgUnitById(parentId))
+          ).then((ous) => {
+            const seen = new Set<string>();
+            return ous.filter((ou) => {
+              if (seen.has(ou.id)) return false;
+              seen.add(ou.id);
+              return true;
+            });
+          });
+
     const [districts, dataSetMeta, cocMap] = await Promise.all([
-      client.getOrgUnitsByLevel(options.parentOrgUnit, 4),
+      orgUnitsPromise,
       client.getDataSetMeta(options.dataSet),
       client.getCategoryOptionCombos(),
     ]);

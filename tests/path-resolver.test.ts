@@ -32,4 +32,14 @@ describe("formatPrefixedOutputPath", () => {
     const output = formatPrefixedOutputPath("custom_folder/report.xlsx", "OU123", ["202601"]);
     expect(output).toBe(path.join("output", "custom_folder", "OU123_202601_report.xlsx"));
   });
+
+  it("handles comma-separated parent org units by joining with underscore", () => {
+    const output = formatPrefixedOutputPath("report.xlsx", "OU1, OU2,OU3", ["202601"]);
+    expect(output).toBe(path.join("output", "OU1_OU2_OU3_202601_report.xlsx"));
+  });
+
+  it("handles array of parent org units by joining with underscore", () => {
+    const output = formatPrefixedOutputPath("report.xlsx", ["OU1", "OU2"], ["202601"]);
+    expect(output).toBe(path.join("output", "OU1_OU2_202601_report.xlsx"));
+  });
 });
