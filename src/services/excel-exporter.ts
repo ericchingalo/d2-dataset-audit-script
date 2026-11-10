@@ -73,6 +73,7 @@ export async function generateExcelReport(
       const headers = [
         'Data Element',
         'Disaggregation',
+        'Attribute Option Combo',
         'Period',
         'Current Value',
         'Modified By',
@@ -108,6 +109,7 @@ export async function generateExcelReport(
         const rowValues: (string | number)[] = [
           row.dataElementName,
           row.disaggregationName,
+          row.attributeOptionComboName || 'default',
           row.period,
           row.currentValue,
           row.modifiedBy,

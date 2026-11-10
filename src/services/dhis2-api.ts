@@ -114,7 +114,7 @@ export class Dhis2ApiClient implements IDhis2ApiClient {
       `api/dataSets/${dataSetId}`,
       {
         params: {
-          fields: "name,dataSetElements[dataElement[id,name]]",
+          fields: "name,categoryCombo[id,name,categoryOptionCombos[id,name]],dataSetElements[dataElement[id,name]]",
         },
       },
     );

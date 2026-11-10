@@ -444,4 +444,199 @@ describe('RevertService', () => {
     expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('p1', 4);
     expect(mockClient.getOrgUnitsByLevel).toHaveBeenCalledWith('p2', 4);
   });
+
+  it('maintains attributeOptionCombo from Excel and posts it to DHIS2', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        attributeOptionCombo: 'Partner Alpha',
+        period: '202601',
+        currentValue: '50',
+        previousValue: '40',
+      },
+    ]);
+
+    const mockPostDataValueSets = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      importCount: { imported: 0, updated: 1, ignored: 0, deleted: 0 },
+    });
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        id: 'ds1',
+        name: 'Dataset 1',
+        dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
+      }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({
+        def_uid: 'default',
+        partner_uid: 'Partner Alpha',
+      }),
+      getDataValueSets: vi.fn(),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(mockPostDataValueSets).toHaveBeenCalledWith({
+      dataSet: 'ds1',
+      dataValues: [
+        expect.objectContaining({
+          dataElement: 'de1',
+          period: '202601',
+          orgUnit: 'dist1',
+          attributeOptionCombo: 'partner_uid',
+          value: '40',
+        }),
+      ],
+    });
+  });
+
+  it('falls back to querying live data values when Excel lacks attributeOptionCombo', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        // attributeOptionCombo is omitted/undefined (older Excel report)
+        period: '202601',
+        currentValue: '50',
+        previousValue: '40',
+      },
+    ]);
+
+    const mockPostDataValueSets = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      importCount: { imported: 0, updated: 1, ignored: 0, deleted: 0 },
+    });
+
+    const mockGetDataValueSets = vi.fn().mockResolvedValue({
+      dataValues: [
+        {
+          dataElement: 'de1',
+          categoryOptionCombo: 'def_uid',
+          attributeOptionCombo: 'live_aoc_uid',
+          period: '202601',
+          orgUnit: 'dist1',
+          value: '50',
+        },
+      ],
+    });
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        id: 'ds1',
+        name: 'Dataset 1',
+        dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
+      }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({
+        def_uid: 'default',
+      }),
+      getDataValueSets: mockGetDataValueSets,
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(mockGetDataValueSets).toHaveBeenCalledWith('dist1', '202601', 'ds1');
+    expect(mockPostDataValueSets).toHaveBeenCalledWith({
+      dataSet: 'ds1',
+      dataValues: [
+        expect.objectContaining({
+          dataElement: 'de1',
+          period: '202601',
+          orgUnit: 'dist1',
+          attributeOptionCombo: 'live_aoc_uid',
+          value: '40',
+        }),
+      ],
+    });
+  });
+
+  it('falls back to default categoryOptionCombo when unmapped', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue(['parent1_202601_report.xlsx'] as any);
+    vi.spyOn(excelReader, 'readAuditReportExcel').mockResolvedValue([
+      {
+        orgUnitName: 'District 1',
+        dataElementName: 'Data Element 1',
+        disaggregationName: 'default',
+        attributeOptionCombo: 'NonExistentAoc',
+        period: '202601',
+        currentValue: '50',
+        previousValue: '40',
+      },
+    ]);
+
+    const mockPostDataValueSets = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      importCount: { imported: 0, updated: 1, ignored: 0, deleted: 0 },
+    });
+
+    const mockClient: IDhis2ApiClient = {
+      getOrgUnitById: vi.fn().mockResolvedValue({ id: 'dist1', name: 'District 1' }),
+      validateOrgUnitLevel: vi.fn().mockResolvedValue(true),
+      getOrgUnitsByLevel: vi.fn(),
+      getDataSetMeta: vi.fn().mockResolvedValue({
+        id: 'ds1',
+        name: 'Dataset 1',
+        dataSetElements: [{ dataElement: { id: 'de1', name: 'Data Element 1' } }],
+      }),
+      getCategoryOptionCombos: vi.fn().mockResolvedValue({
+        default_coc_uid: 'default',
+      }),
+      getDataValueSets: vi.fn().mockResolvedValue({ dataValues: [] }),
+      getDataValueAudits: vi.fn(),
+      postDataValueSets: mockPostDataValueSets,
+    };
+
+    const service = new RevertService(() => mockClient);
+    const result = await service.execute({
+      baseUrl: 'https://dhis2.example.org',
+      parentOrgUnit: 'parent1',
+      dataSet: 'ds1',
+      periods: ['202601'],
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(mockPostDataValueSets).toHaveBeenCalledWith({
+      dataSet: 'ds1',
+      dataValues: [
+        expect.objectContaining({
+          dataElement: 'de1',
+          period: '202601',
+          orgUnit: 'dist1',
+          attributeOptionCombo: 'default_coc_uid',
+          value: '40',
+        }),
+      ],
+    });
+  });
 });

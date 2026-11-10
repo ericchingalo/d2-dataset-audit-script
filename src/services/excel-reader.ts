@@ -4,6 +4,7 @@ export interface ParsedAuditRow {
   orgUnitName: string;
   dataElementName: string;
   disaggregationName: string;
+  attributeOptionCombo?: string;
   period: string;
   currentValue: string;
   previousValue: string;
@@ -27,6 +28,7 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
 
     let dataElementColIndex = -1;
     let disaggregationColIndex = -1;
+    let attributeOptionComboColIndex = -1;
     let periodColIndex = -1;
     let currentValueColIndex = -1;
     let lastUpdatedColIndex = -1;
@@ -36,6 +38,9 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
       const headerText = cell.value ? String(cell.value).trim().toLowerCase() : '';
       if (headerText === 'data element') dataElementColIndex = colNumber;
       if (headerText === 'disaggregation') disaggregationColIndex = colNumber;
+      if (headerText === 'attribute option combo' || headerText === 'attributeoptioncombo') {
+        attributeOptionComboColIndex = colNumber;
+      }
       if (headerText === 'period') periodColIndex = colNumber;
       if (headerText === 'current value') currentValueColIndex = colNumber;
       if (headerText === 'last updated') lastUpdatedColIndex = colNumber;
@@ -74,6 +79,17 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
           ? String(previousValueRaw).trim()
           : '';
 
+      let attributeOptionCombo: string | undefined = undefined;
+      if (attributeOptionComboColIndex !== -1) {
+        const rawAoc = row.getCell(attributeOptionComboColIndex).value;
+        if (rawAoc !== null && rawAoc !== undefined) {
+          const trimmed = String(rawAoc).trim();
+          if (trimmed) {
+            attributeOptionCombo = trimmed;
+          }
+        }
+      }
+
       let lastUpdated = '';
       if (lastUpdatedColIndex !== -1) {
         const rawLastUpdated = row.getCell(lastUpdatedColIndex).value;
@@ -89,6 +105,7 @@ export async function readAuditReportExcel(filePath: string): Promise<ParsedAudi
           orgUnitName,
           dataElementName,
           disaggregationName,
+          attributeOptionCombo,
           period,
           currentValue,
           previousValue,

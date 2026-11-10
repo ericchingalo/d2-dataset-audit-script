@@ -219,4 +219,75 @@ describe('mergeAuditData', () => {
     expect(result[0].period).toBe('2026');
     expect(result[1].period).toBe('2025');
   });
+
+  it('should differentiate and merge data values by attributeOptionCombo', () => {
+    const customCocNames = {
+      ...cocNames,
+      partnerA: 'Partner Alpha',
+      partnerB: 'Partner Beta',
+    };
+
+    const dataValues: DataValue[] = [
+      {
+        dataElement: 'QHszJHrLFgx',
+        period: '2026',
+        orgUnit: 'QuGXmXjGx2o',
+        categoryOptionCombo: 'HllvX50cXC0',
+        attributeOptionCombo: 'partnerA',
+        value: '100',
+      },
+      {
+        dataElement: 'QHszJHrLFgx',
+        period: '2026',
+        orgUnit: 'QuGXmXjGx2o',
+        categoryOptionCombo: 'HllvX50cXC0',
+        attributeOptionCombo: 'partnerB',
+        value: '200',
+      },
+    ];
+
+    const audits: DataValueAudit[] = [
+      {
+        created: '2026-05-31T18:00:00.000',
+        modifiedBy: 'userA',
+        auditType: 'UPDATE',
+        value: '90',
+        period: '2026',
+        organisationUnit: 'QuGXmXjGx2o',
+        attributeOptionCombo: 'partnerA',
+        categoryOptionCombo: 'HllvX50cXC0',
+        dataElement: 'QHszJHrLFgx',
+      },
+      {
+        created: '2026-05-31T19:00:00.000',
+        modifiedBy: 'userB',
+        auditType: 'UPDATE',
+        value: '190',
+        period: '2026',
+        organisationUnit: 'QuGXmXjGx2o',
+        attributeOptionCombo: 'partnerB',
+        categoryOptionCombo: 'HllvX50cXC0',
+        dataElement: 'QHszJHrLFgx',
+      },
+    ];
+
+    const result = mergeAuditData(
+      dataValues,
+      audits,
+      dataElementNames,
+      customCocNames,
+      mockOrgUnit
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0].attributeOptionComboId).toBe('partnerA');
+    expect(result[0].attributeOptionComboName).toBe('Partner Alpha');
+    expect(result[0].currentValue).toBe('100');
+    expect(result[0].history[0].value).toBe('90');
+
+    expect(result[1].attributeOptionComboId).toBe('partnerB');
+    expect(result[1].attributeOptionComboName).toBe('Partner Beta');
+    expect(result[1].currentValue).toBe('200');
+    expect(result[1].history[0].value).toBe('190');
+  });
 });

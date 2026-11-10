@@ -198,6 +198,15 @@ export class RevertService implements IRevertService {
       cocNameToIdMap[name.trim().toLowerCase()] = id;
     }
 
+    const defaultCocEntry = Object.entries(cocMap).find(
+      ([_, name]) => name.trim().toLowerCase() === "default",
+    );
+    const defaultCocId =
+      defaultCocEntry?.[0] ||
+      dataSetMeta.categoryCombo?.categoryOptionCombos?.[0]?.id ||
+      cocNameToIdMap["default"] ||
+      "default";
+
     const orgUnitNameToIdMap: Record<string, string> = {};
     const existingSheetNames = new Set<string>();
     for (const ou of districts) {
@@ -205,6 +214,28 @@ export class RevertService implements IRevertService {
       const sanitized = sanitizeSheetName(ou.name, existingSheetNames);
       orgUnitNameToIdMap[sanitized.trim().toLowerCase()] = ou.id;
     }
+
+    const liveDataValuesCache = new Map<string, Promise<DataValue[]>>();
+    const getLiveDataValues = async (
+      ou: string,
+      pe: string,
+    ): Promise<DataValue[]> => {
+      const cacheKey = `${ou}:${pe}`;
+      if (!liveDataValuesCache.has(cacheKey)) {
+        liveDataValuesCache.set(
+          cacheKey,
+          (async () => {
+            try {
+              const res = await client.getDataValueSets(ou, pe, options.dataSet!);
+              return res?.dataValues || [];
+            } catch {
+              return [];
+            }
+          })(),
+        );
+      }
+      return liveDataValuesCache.get(cacheKey)!;
+    };
 
     const valuesToRevert: DataValue[] = [];
     const processedOrgUnitIds = new Set<string>();
@@ -251,10 +282,46 @@ export class RevertService implements IRevertService {
           continue;
         }
 
+        let resolvedAocId: string | undefined = undefined;
+
+        if (row.attributeOptionCombo) {
+          const rawAoc = row.attributeOptionCombo.trim();
+          const aocNameLower = rawAoc.toLowerCase();
+          if (cocNameToIdMap[aocNameLower]) {
+            resolvedAocId = cocNameToIdMap[aocNameLower];
+          } else if (cocMap[rawAoc]) {
+            resolvedAocId = rawAoc;
+          } else {
+            console.warn(
+              `[Warning] Unmapped Attribute Option Combo: "${row.attributeOptionCombo}" for DE "${row.dataElementName}". Falling back to default (${defaultCocId}).`,
+            );
+            resolvedAocId = defaultCocId;
+          }
+        } else {
+          // Fallback: Query live data values for matching (ou, period, de, coc)
+          try {
+            const liveValues = await getLiveDataValues(ouId, row.period);
+            const match = liveValues.find(
+              (dv) =>
+                dv.dataElement === deId &&
+                (dv.categoryOptionCombo || "default") === (cocId || "default"),
+            );
+            if (match?.attributeOptionCombo) {
+              resolvedAocId = match.attributeOptionCombo;
+            }
+          } catch {
+            // ignore and fallback
+          }
+
+          if (!resolvedAocId) {
+            resolvedAocId = defaultCocId;
+          }
+        }
+
         processedOrgUnitIds.add(ouId);
 
         console.log(
-          `  [Revert candidate] DE: ${row.dataElementName} (${deId}) | Period: ${row.period} | Current: "${row.currentValue}" -> Revert to: "${row.previousValue}"`,
+          `  [Revert candidate] DE: ${row.dataElementName} (${deId}) | Period: ${row.period} | AOC: ${resolvedAocId} | Current: "${row.currentValue}" -> Revert to: "${row.previousValue}"`,
         );
 
         valuesToRevert.push({
@@ -262,6 +329,7 @@ export class RevertService implements IRevertService {
           period: row.period,
           orgUnit: ouId,
           categoryOptionCombo: cocId && cocId !== "default" ? cocId : undefined,
+          attributeOptionCombo: resolvedAocId,
           value: row.previousValue,
           comment: `Reverted to previous value from ${row.currentValue} after dataset audit`,
         });

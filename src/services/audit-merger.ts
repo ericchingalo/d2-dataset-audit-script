@@ -20,10 +20,11 @@ export function mergeAuditData(
   cocNames: Record<string, string>,
   orgUnit: OrganisationUnit
 ): MergedAuditRow[] {
-  // Map current data values by key: dataElement:categoryOptionCombo:period
+  // Map current data values by key: dataElement:categoryOptionCombo:attributeOptionCombo:period
   const currentValuesMap = new Map<string, DataValue>();
   for (const dv of dataValues) {
-    const key = `${dv.dataElement}:${dv.categoryOptionCombo || 'default'}:${dv.period}`;
+    const aoc = dv.attributeOptionCombo || 'default';
+    const key = `${dv.dataElement}:${dv.categoryOptionCombo || 'default'}:${aoc}:${dv.period}`;
     currentValuesMap.set(key, dv);
   }
 
@@ -35,8 +36,9 @@ export function mergeAuditData(
   for (const audit of updateAudits) {
     const deId = extractId(audit.dataElement);
     const cocId = extractId(audit.categoryOptionCombo) || 'default';
+    const aocId = extractId(audit.attributeOptionCombo) || 'default';
     const period = extractId(audit.period);
-    const key = `${deId}:${cocId}:${period}`;
+    const key = `${deId}:${cocId}:${aocId}:${period}`;
 
     if (!auditGroups.has(key)) {
       auditGroups.set(key, []);
@@ -48,7 +50,7 @@ export function mergeAuditData(
 
   // Build merged rows for keys that have update audit records
   for (const [key, cellAudits] of auditGroups.entries()) {
-    const [deId, cocId, period] = key.split(':');
+    const [deId, cocId, aocIdFromKey, period] = key.split(':');
     const currentValueObj = currentValuesMap.get(key);
 
     // Sort audits descending by created date (newest first)
@@ -77,7 +79,12 @@ export function mergeAuditData(
     const aocId =
       currentValueObj?.attributeOptionCombo ||
       extractId(sortedAudits[0]?.attributeOptionCombo) ||
-      undefined;
+      (aocIdFromKey !== 'default' ? aocIdFromKey : undefined);
+
+    let aocName = (aocId && cocNames[aocId]) ? cocNames[aocId] : (aocId || 'default');
+    if (aocName === 'default' || aocId === 'default' || !aocName) {
+      aocName = 'default';
+    }
 
     resultRows.push({
       dataElementId: deId,
@@ -92,13 +99,14 @@ export function mergeAuditData(
       lastUpdated,
       history,
       attributeOptionComboId: aocId,
+      attributeOptionComboName: aocName,
     });
   }
 
   // Sort rows by period (descending), then dataElementName (ascending), then disaggregationName (ascending)
   return lodash.orderBy(
     resultRows,
-    ['period', 'dataElementName', 'disaggregationName'],
-    ['desc', 'asc', 'asc']
+    ['period', 'dataElementName', 'disaggregationName', 'attributeOptionComboName'],
+    ['desc', 'asc', 'asc', 'asc']
   );
 }

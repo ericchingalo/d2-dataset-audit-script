@@ -25,6 +25,11 @@ export interface DataSetMeta {
   id?: string;
   name: string;
   dataSetElements: DataSetElement[];
+  categoryCombo?: {
+    id: string;
+    name?: string;
+    categoryOptionCombos?: CategoryOptionCombo[];
+  };
 }
 
 export interface DataValueAudit {
@@ -101,4 +106,5 @@ export interface MergedAuditRow {
   lastUpdated: string;
   history: HistoryEntry[];
   attributeOptionComboId?: string;
+  attributeOptionComboName?: string;
 }
